@@ -1,2 +1,3 @@
-# cloudpoint
-Cloud point project for practical module.
+1. Install Open3d
+conda install -c open3d-admin open3d
+

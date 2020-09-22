@@ -17,9 +17,14 @@ def read_pts_3d(map_img):
     idx = 0
     for idx_x in range(pts_data.shape[0]):
         for idx_y in range(pts_data.shape[1]):
-            idx_z = 255 - pts_data[idx_x, idx_y]
-            xyz_3d[idx] = (idx_x, idx_y, idx_z)
-            idx = idx + 1
+            rel_z = pts_data[idx_x, idx_y]
+            # Ignore ground points (rel_z = 0)
+            if rel_z != 0:
+                idx_z = 255 - pts_data[idx_x, idx_y]
+
+                xyz_3d[idx] = (idx_x, idx_y, idx_z)
+                idx = idx + 1
+
 
     t_spend = time() - t_start
 

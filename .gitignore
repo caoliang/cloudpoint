@@ -1,3 +1,4 @@
 /data/scandata/
 /.idea/
 data/processed/*.pcd
+/data/sample/

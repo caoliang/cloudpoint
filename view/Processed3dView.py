@@ -3,9 +3,14 @@ import numpy as np
 from time import time
 import open3d as o3d
 from tqdm import tqdm
+import multiprocessing as mp
 
 
-def fileter_map_pts(pts_data, xyz_data):
+def fileter_map_pts(pts_data):
+    print("Number of processors: ", mp.cpu_count())
+
+    xyz_data = np.empty((0, 3), int)
+
     slice_x = 1024
     slice_y = 1024
 
@@ -15,42 +20,53 @@ def fileter_map_pts(pts_data, xyz_data):
     pieces_y = int(size_y / slice_y) + 1 if size_y % slice_y > 0 else int(size_y / slice_y)
     print(f"Total grids: {pieces_x} x {pieces_y}")
 
-    xyz_data_index = 0
-
     for grid_x in tqdm(range(pieces_x)):
         for grid_y in range(pieces_y):
-            x_start = grid_x * slice_x
-            x_end = min((grid_x + 1) * slice_x, size_x)
-            y_start = grid_y * slice_y
-            y_end = min((grid_y + 1) * slice_y, size_y)
+            filtered_xyz_data = fileter_pts_grid(grid_x, grid_y, slice_x, slice_y, pts_data)
+            if filtered_xyz_data.shape[0] > 0:
+                xyz_data = np.vstack((xyz_data, filtered_xyz_data))
 
-            #print(f"grid_x: {grid_x}, grid_y: {grid_y}")
-            #print(f"x_start: {x_start}, x_end: {x_end}")
-            #print(f"y_start: {y_start}, y_end: {y_end}")
-
-            grid_min = np.min(pts_data[x_start:x_end, y_start:y_end])
-            grid_max = np.max(pts_data[x_start:x_end, y_start:y_end])
-            grid_avg = np.average(pts_data[x_start:x_end, y_start:y_end])
-            #print(f"grid_min: {grid_min}, grid_max: {grid_max}, grid_avg: {grid_avg}")
-
-            if grid_min > 0 and grid_min == grid_max and grid_max == grid_avg:
-                pass
-                #print(f"Located empty grid at grid ({grid_x}, {grid_y})")
-                #print(f"Reset empty grid points z value to 0")
-                #filtered_pts[x_start:x_end, y_start:y_end] = 0
-            else:
-                #print(f"Prepare grid points at grid ({grid_x}, {grid_y})")
-
-                for pts_x in range(x_start, x_end):
-                    for pts_y in range(y_start, y_end):
-                        rel_z = pts_data[pts_x, pts_y]
-                        if rel_z != 0:
-                            pts_z = 255 - rel_z
-
-                            xyz_data[xyz_data_index] = (pts_x, pts_y, pts_z)
-                            xyz_data_index = xyz_data_index + 1
+    print("")
 
     return xyz_data
+
+def fileter_pts_grid(grid_x, grid_y, slice_x, slice_y, pts_arr):
+    xyz_arr = []
+    size_x, size_y = pts_arr.shape
+
+    x_start = grid_x * slice_x
+    x_end = min((grid_x + 1) * slice_x, size_x)
+    y_start = grid_y * slice_y
+    y_end = min((grid_y + 1) * slice_y, size_y)
+
+    #print(f"grid_x: {grid_x}, grid_y: {grid_y}")
+    # print(f"x_start: {x_start}, x_end: {x_end}")
+    # print(f"y_start: {y_start}, y_end: {y_end}")
+
+    grid_min = np.min(pts_arr[x_start:x_end, y_start:y_end])
+    grid_max = np.max(pts_arr[x_start:x_end, y_start:y_end])
+    grid_avg = np.average(pts_arr[x_start:x_end, y_start:y_end])
+    # print(f"grid_min: {grid_min}, grid_max: {grid_max}, grid_avg: {grid_avg}")
+
+    if grid_min > 0 and grid_min == grid_max and grid_max == grid_avg:
+        pass
+        # print(f"Located empty grid at grid ({grid_x}, {grid_y})")
+        # print(f"Reset empty grid points z value to 0")
+        # filtered_pts[x_start:x_end, y_start:y_end] = 0
+    else:
+        # print(f"Prepare grid points at grid ({grid_x}, {grid_y})")
+
+        for pts_x in range(x_start, x_end):
+            for pts_y in range(y_start, y_end):
+                rel_z = pts_arr[pts_x, pts_y]
+                if rel_z != 0:
+                    pts_z = 255 - rel_z
+
+                    xyz_arr.append([pts_x, pts_y, pts_z])
+
+    zyz_np_arr = np.array(xyz_arr).reshape(-1, 3)
+
+    return zyz_np_arr
 
 
 def read_pts_3d(map_img):
@@ -62,9 +78,7 @@ def read_pts_3d(map_img):
 
     t_start = time()
 
-    xyz_3d = np.zeros((pts_data.shape[0] * pts_data.shape[1], 3))
-
-    fileter_map_pts(pts_data, xyz_3d)
+    xyz_3d = fileter_map_pts(pts_data)
 
     t_spend = time() - t_start
 

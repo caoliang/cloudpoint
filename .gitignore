@@ -2,3 +2,4 @@
 /.idea/
 data/processed/*.pcd
 /data/sample/
+examples/

@@ -110,7 +110,7 @@ def read_pts_3d(map_img):
     return xyz_3d
 
 
-def locate_origin_point(xyz_3d, min_x, min_y, map_factor_x=0.5, map_factor_y=0.5):
+def locate_origin_point(min_x, min_y, map_factor_x=0.5, map_factor_y=0.5):
     pos_x = math.ceil(abs(0 - min_x) * map_factor_x)
     pos_y = math.ceil(abs(0 - min_y) * map_factor_y)
 
@@ -119,6 +119,17 @@ def locate_origin_point(xyz_3d, min_x, min_y, map_factor_x=0.5, map_factor_y=0.5
     print(f"Origin point: {origin_pt}")
 
     return origin_pt
+
+
+def locate_point(real_x, real_y, min_x, min_y, map_factor_x=0.5, map_factor_y=0.5):
+    pos_x = math.ceil(abs(real_x - min_x) * map_factor_x)
+    pos_y = math.ceil(abs(real_y - min_y) * map_factor_y)
+
+    map_pt = (pos_x, pos_y, 0)
+
+    print(f"Mapped point: {map_pt} for real point ({real_x}, {real_y})")
+
+    return map_pt
 
 
 def check_pts_3d(pts_3d):
@@ -156,7 +167,12 @@ if __name__ == "__main__":
 
     size_x, size_y = map_img.size
 
-    origin_point = locate_origin_point(pts, min_x=min_x, min_y=min_y)
+    origin_point = locate_origin_point(min_x=min_x, min_y=min_y)
+
+    check_x = 10
+    check_y = 10
+
+    check_point = locate_point(check_x, check_y, min_x=min_x, min_y=min_y)
 
     show_pts_3d(pts)
 

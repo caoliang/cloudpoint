@@ -7,8 +7,6 @@ import multiprocessing as mp
 
 
 def fileter_map_pts(pts_data):
-    print("Number of processors: ", mp.cpu_count())
-
     xyz_data = np.empty((0, 3), int)
 
     slice_x = 1024
@@ -20,11 +18,27 @@ def fileter_map_pts(pts_data):
     pieces_y = int(size_y / slice_y) + 1 if size_y % slice_y > 0 else int(size_y / slice_y)
     print(f"Total grids: {pieces_x} x {pieces_y}")
 
+    grid_xyz_arr = []
+
+    print("Number of processors: ", mp.cpu_count())
+    pool = mp.Pool(mp.cpu_count())
+
+    # grid_xyz_arr = [pool.apply(fileter_pts_grid, args=(grid_x, grid_y, slice_x, slice_y, pts_data))
+    #                 for grid_x in range(pieces_x) for grid_y in range(pieces_y)]
+
     for grid_x in tqdm(range(pieces_x)):
         for grid_y in range(pieces_y):
-            filtered_xyz_data = fileter_pts_grid(grid_x, grid_y, slice_x, slice_y, pts_data)
-            if filtered_xyz_data.shape[0] > 0:
-                xyz_data = np.vstack((xyz_data, filtered_xyz_data))
+            filtered_xyz_data = pool.apply(fileter_pts_grid, args=(grid_x, grid_y, slice_x, slice_y, pts_data))
+            grid_xyz_arr.append_ass(filtered_xyz_data)
+    #         filtered_xyz_data = fileter_pts_grid(grid_x, grid_y, slice_x, slice_y, pts_data)
+    #         if filtered_xyz_data.shape[0] > 0:
+    #             xyz_data = np.vstack((xyz_data, filtered_xyz_data))
+
+    pool.close()
+    pool.join()
+
+    for grid_data in grid_xyz_arr:
+        xyz_data = np.vstack((xyz_data, grid_data))
 
     print("")
 
@@ -39,7 +53,7 @@ def fileter_pts_grid(grid_x, grid_y, slice_x, slice_y, pts_arr):
     y_start = grid_y * slice_y
     y_end = min((grid_y + 1) * slice_y, size_y)
 
-    #print(f"grid_x: {grid_x}, grid_y: {grid_y}")
+    print(f"grid_x: {grid_x}, grid_y: {grid_y}")
     # print(f"x_start: {x_start}, x_end: {x_end}")
     # print(f"y_start: {y_start}, y_end: {y_end}")
 

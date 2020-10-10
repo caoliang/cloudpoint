@@ -5,6 +5,8 @@ import open3d as o3d
 from tqdm import tqdm
 import math
 import multiprocessing as mp
+from matplotlib import pyplot as plt
+import json
 
 
 xyz_data_results = []
@@ -139,9 +141,15 @@ def check_pts_3d(pts_3d):
             print(xyz)
 
 
+def convert_to_pcd_data(pts_3d):
+    pcd_data = o3d.geometry.PointCloud()
+    pcd_data.points = o3d.utility.Vector3dVector(pts_3d)
+
+    return pcd_data
+
+
 def show_pts_3d(pts_3d):
-    pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.utility.Vector3dVector(pts_3d)
+    pcd = convert_to_pcd_data(pts_3d)
 
     o3d.visualization.draw_geometries([pcd], mesh_show_wireframe=True)
 
@@ -155,6 +163,75 @@ def save_pcd_data(pts_3d, pcd_file):
 def show_pcd_file(pcd_file):
     pcd = o3d.io.read_point_cloud(pcd_file)
     o3d.visualization.draw_geometries([pcd], mesh_show_wireframe=True)
+
+
+def show_pcd_data(pcd_data):
+    vis = o3d.visualization.Visualizer()
+    vis.create_window()
+    vis.add_geometry(pcd_data)
+    #vis.get_render_option().load_from_json("renderoption.json")
+    vis.run()
+    vis.destroy_window()
+
+
+def show_pcd_data_with_key_callback(pcd_data):
+
+    def change_background_to_black(vis):
+        opt = vis.get_render_option()
+        opt.background_color = np.asarray([0, 0, 0])
+        return False
+
+    def save_render_option(vis):
+        vis.get_render_option().save_to_json("renderoption.json")
+        return False
+
+    def load_render_option(vis):
+        vis.get_render_option().load_from_json("renderoption.json")
+        return False
+
+    def save_image(vis):
+        vis.capture_screen_image("image.png")
+        return False
+
+    def capture_image(vis):
+        image = vis.capture_screen_float_buffer()
+        plt.imshow(np.asarray(image))
+        plt.show()
+        return False
+
+    def save_view_trajectory(vis):
+        ctr = vis.get_view_control()
+        camera_param = ctr.convert_to_pinhole_camera_parameters()
+        o3d.io.write_pinhole_camera_parameters("pinhole_camera_parameters.json", camera_param)
+        return False
+
+    def load_view_trajectory(vis):
+        ctr = vis.get_view_control()
+        camera_params = o3d.io.read_pinhole_camera_parameters("pinhole_camera_parameters.json")
+        ctr.convert_from_pinhole_camera_parameters(camera_params)
+        return False
+
+
+    key_to_callback = {}
+    key_to_callback[ord("K")] = change_background_to_black
+    key_to_callback[ord("S")] = save_render_option
+    key_to_callback[ord("R")] = load_render_option
+    key_to_callback[ord(",")] = save_image
+    key_to_callback[ord(".")] = capture_image
+    key_to_callback[ord("P")] = save_view_trajectory
+    key_to_callback[ord("V")] = load_view_trajectory
+
+    window_width = 640
+    window_height = 480
+
+    vis = o3d.visualization.VisualizerWithKeyCallback()
+    vis.create_window(width=window_width, height=window_height)
+    vis.add_geometry(pcd_data)
+    for key, callback in key_to_callback.items():
+        vis.register_key_callback(key, callback)
+
+    vis.run()
+    vis.destroy_window()
 
 
 if __name__ == "__main__":
@@ -174,9 +251,10 @@ if __name__ == "__main__":
 
     check_point = locate_point(check_x, check_y, min_x=min_x, min_y=min_y)
 
-    show_pts_3d(pts)
+    #show_pts_3d(pts)
 
-    # Do not use pcd file since its size was too big (300MB+)
-    #pcd_file = "..\\data\\processed\\merged_gray_images.pcd"
-    #save_pcd_data(pts, pcd_file)
-    #show_pcd_file(pcd_file)
+    pcd_data = convert_to_pcd_data(pts)
+
+    #show_pcd_data(pcd_data)
+    show_pcd_data_with_key_callback(pcd_data)
+

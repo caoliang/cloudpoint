@@ -49,6 +49,8 @@ def fileter_map_pts(pts_data):
 def fileter_pts_grid(grid_x, grid_y, slice_x, slice_y, pts_arr):
     xyz_arr = []
     size_x, size_y = pts_arr.shape
+    downsample_size_x = 2
+    downsample_size_y = 2
 
     x_start = grid_x * slice_x
     x_end = min((grid_x + 1) * slice_x, size_x)
@@ -72,8 +74,8 @@ def fileter_pts_grid(grid_x, grid_y, slice_x, slice_y, pts_arr):
     else:
         # print(f"Prepare grid points at grid ({grid_x}, {grid_y})")
 
-        for pts_x in range(x_start, x_end):
-            for pts_y in range(y_start, y_end):
+        for pts_x in range(x_start, x_end, downsample_size_x):
+            for pts_y in range(y_start, y_end, downsample_size_y):
                 rel_z = pts_arr[pts_x, pts_y]
                 if rel_z != 0:
                     pts_z = 255 - rel_z

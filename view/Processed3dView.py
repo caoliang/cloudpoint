@@ -3,6 +3,7 @@ import numpy as np
 from time import time
 import open3d as o3d
 from tqdm import tqdm
+import math
 import multiprocessing as mp
 
 
@@ -87,11 +88,15 @@ def fileter_pts_grid(grid_x, grid_y, slice_x, slice_y, pts_arr):
     return zyz_np_arr
 
 
-def read_pts_3d(map_img):
-    image = Image.open(map_img)
-    print(f"map_img: {map_img}, format: {image.format}, size: {image.size}")
+def read_2d_map_image(imag_file):
+    image = Image.open(imag_file).transpose(Image.ROTATE_270)
+    print(f"map_img: {imag_file}, format: {image.format}, size: {image.size}")
 
-    pts_data = np.asarray(image)
+    return image
+
+def read_pts_3d(map_img):
+    pts_data = np.asarray(map_img)
+    #pts_data = np.moveaxis(pts_data, 0, -1)
     print(f"pts_data: {pts_data.shape}, type: {type(pts_data)}")
 
     t_start = time()
@@ -103,6 +108,17 @@ def read_pts_3d(map_img):
     print(f"xyz_3d: {xyz_3d.shape}, type: {type(xyz_3d)}, time: {t_spend}")
 
     return xyz_3d
+
+
+def locate_origin_point(xyz_3d, min_x, min_y, map_factor_x=0.5, map_factor_y=0.5):
+    pos_x = math.ceil(abs(0 - min_x) * map_factor_x)
+    pos_y = math.ceil(abs(0 - min_y) * map_factor_y)
+
+    origin_pt = (pos_x, pos_y, 0)
+
+    print(f"Origin point: {origin_pt}")
+
+    return origin_pt
 
 
 def check_pts_3d(pts_3d):
@@ -131,7 +147,17 @@ def show_pcd_file(pcd_file):
 
 
 if __name__ == "__main__":
-    pts = read_pts_3d("..\\data\\processed\\merged_gray_images.png")
+    map_img = read_2d_map_image("..\\data\\processed\\merged_gray_images.png")
+    pts = read_pts_3d(map_img)
+
+    # Compute from scan3dview
+    min_x = -5120
+    min_y = -6144
+
+    size_x, size_y = map_img.size
+
+    origin_point = locate_origin_point(pts, min_x=min_x, min_y=min_y)
+
     show_pts_3d(pts)
 
     # Do not use pcd file since its size was too big (300MB+)

@@ -33,18 +33,13 @@ def read_scan_file(scan_file, scan_mat, scan_pos):
     with open(scan_file, "r") as sf:
         sf_lines = sf.readlines()
 
-    scan_pts = None
+    scan_pts = np.empty((0, 3), int)
     for sf_line in sf_lines:
         line = sf_line.replace("\n", "").replace(" ", ",")
         pos = np.transpose(np.array(eval("[" + line + "]")))
         res = np.round(np.matmul(scan_mat, pos) + pos).astype('int')
 
-        if scan_pts is None:
-            scan_pts = res
-        else:
-            scan_pts = np.vstack([scan_pts, res])
-
-        scan_pts = scan_pts.reshape(-1, 3)
+        scan_pts = np.vstack((scan_pts, res))
 
     return scan_pts
 
@@ -67,17 +62,11 @@ def read_scan_pts(scan_index, data_folder):
 
 
 def read_scan_pts_in_range(scan_index_range, data_folder):
-    scan_pts = None
+    scan_pts = np.empty((0, 3), int)
 
     for i in scan_index_range:
         data_pts = read_scan_pts(i, data_folder)
-
-        if scan_pts is None:
-            scan_pts = data_pts
-        else:
-            scan_pts = np.vstack([scan_pts, data_pts])
-
-        scan_pts = scan_pts.reshape(-1, 3)
+        scan_pts = np.vstack([scan_pts, data_pts])
 
     return scan_pts
 
@@ -106,5 +95,38 @@ def show_custom_view(scan_pts, view_config):
 
 if __name__ == "__main__":
     data_pts = read_scan_pts_in_range(range(0, 10), "..\\data\\scandata")
+
+    slicesize = 1024
+    # xmin=np.min(data_pts[:,0])
+    # xmax=np.max(data_pts[:,0])
+    # ymin=np.min(data_pts[:,2])
+    # ymax=np.max(data_pts[:,2])
+    # zmin=np.min(data_pts[:,1])
+    # zmax=np.max(data_pts[:,1])
+    #
+    # print(f"data_pts range: ({xmin}, {xmax}), ({ymin}, {ymax}), ({zmin, zmax})")
+
+    min_pts = np.amin(data_pts, axis=0)
+    max_pts = np.amax(data_pts, axis=0)
+
+    print(f"data_pts min: {min_pts}")
+    print(f"data_pts max: {max_pts}")
+
+    xmin, xmax, ymin, ymax = min_pts[0], max_pts[0], min_pts[2], max_pts[2]
+
+    startx = math.floor(xmin / slicesize) * slicesize
+    starty = math.floor(ymin / slicesize) * slicesize
+    endx = math.floor(xmax / slicesize) * slicesize
+    endy = math.floor(ymax / slicesize) * slicesize
+
+    print(f"data_pts x range: ({startx}, {endx}), ")
+    print(f"data_pts y range: ({starty}, {endy}), ")
+
+    map_size = (endx + slicesize - startx, endy + slicesize - starty)
+
+    print(f"Processed3dView point min_x: {startx}, min_y: {starty}")
+
+    print(f"map size: {map_size}")
+
     #show_scan_pts(data_pts)
     show_custom_view(data_pts, "renderoption.json")

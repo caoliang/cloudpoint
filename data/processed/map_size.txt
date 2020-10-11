@@ -1,0 +1,10 @@
+data_pts min: [-4971 -2143 -5943]
+data_pts max: [5866 4356 5893]
+data_pts x range: (-5120, 5120), 
+data_pts y range: (-6144, 5120), 
+Processed3dView point min_x: -5120, min_y: -6144
+map size: (11264, 12288)
+
+map_img: ..\data\processed\merged_gray_images.png, format: PNG, size: (5120, 6144)
+pts_data: (6144, 5120), type: <class 'numpy.ndarray'>
+Total grids: 6 x 5

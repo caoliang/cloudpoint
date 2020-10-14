@@ -4,3 +4,5 @@ data/processed/*.pcd
 /data/sample/
 examples/
 view/TrackingViewer.log
+view/Processed3dView.log
+view/ViewerBackendService.log

@@ -64,8 +64,7 @@ class ViewerService(rpyc.Service):
                  "map_img": map_state.map_img}
 
         try:
-            req_map_state = self._resp_q.get(timeout=0.1)
-            map_state = req_map_state
+            map_state = self._resp_q.get(timeout=0.1)
             map_state.resp_state_err = "response ok"
         except:
             map_state.resp_state_err = "response error"
@@ -108,7 +107,7 @@ class ViewerService(rpyc.Service):
             map_state.rear_img = view_task_state["rear_img"]
             map_state.map_img = view_task_state["map_img"]
 
-            logging.info(f"Completed view task: {view_task_state}")
+            logging.info(f"Received with completed view task: {map_state}")
 
         try:
             # Always to get latest task and ignore other tasks

@@ -1,10 +1,22 @@
+import base64
 import tkinter as tk
+from io import BytesIO
 from tkinter import ttk
 import sys
 import logging
 import os
 from PIL import Image, ImageTk
 import rpyc
+from time import time, sleep
+
+class MapViewState():
+
+    def __init__(self):
+        self.pos = (0, 0)
+
+        self.front_img = None
+        self.rear_img = None
+        self.map_img = None
 
 
 class MapAgent():
@@ -23,8 +35,7 @@ class MapAgent():
 
     def disconnect(self):
         try:
-            if self.connected:
-                self.conn.close()
+            self.conn.close()
         except Exception:
             logging.error("Connect rpyc server error", exc_info=True)
         finally:
@@ -32,6 +43,8 @@ class MapAgent():
 
     def request_views(self, pos=(0, 0)):
         success = True
+
+        self.connect()
         try:
             params = {"pos": pos}
             results = self.conn.root.request_view(params)
@@ -45,15 +58,28 @@ class MapAgent():
 
         return success
 
+    def b64_to_img(self, b64_str):
+        img_bytes = base64.b64decode(b64_str)
+        img_file = BytesIO(img_bytes)
+        img = Image.open(img_file)
+
+        return img
+
     def receive_views(self):
         success = True
-        results = None
+        map_view = MapViewState()
+
+        self.connect()
 
         try:
             results = self.conn.root.receive_view()
             if results["state_err"] == "response ok":
-                pos = results["pos"]
-                logging.info(f"Receive map view at pos: {pos} ok")
+                map_view.pos = results["pos"]
+                map_view.map_img = self.b64_to_img(results["map_img"])
+                map_view.front_img = self.b64_to_img(results["front_img"])
+                map_view.rear_img = self.b64_to_img(results["rear_img"])
+
+                logging.info(f"Receive map view at pos: {map_view.pos} ok")
             else:
                 logging.info(f"Failed to receive map view")
                 success = False
@@ -61,7 +87,7 @@ class MapAgent():
             logging.error("Receive map view error", exc_info=True)
             success = False
 
-        return (success, results)
+        return (success, map_view)
 
 
 class MapViewer():
@@ -106,37 +132,56 @@ class MapViewer():
         photo_img = ImageTk.PhotoImage(resized_img)
         return photo_img
 
+    def resize_map_view(self, image, img_size):
+        resized_img = image.resize(img_size, Image.ANTIALIAS)
+        photo_img = ImageTk.PhotoImage(resized_img)
+        return photo_img
+
     def stop_viewer(self):
         self.service_agent.disconnect()
 
 
     def start_viewer(self, image_id=1):
         logging.info(f"Request map view from agent")
-        if not self.service_agent.connected:
-            self.service_agent.connect()
-
-        request_results = self.service_agent.request_views(pos=(0, 1))
-        if request_results:
+        service_status = self.service_agent.request_views(pos=(0, 1))
+        map_view_results = None
+        if service_status:
+            # Wait for 0.1 seconds then try retrieve map view reply
+            sleep(0.1)
             logging.info(f"Retrieve map view from agent")
-            map_view_results = self.service_agent.receive_views()
-            logging.debug(f"Retrieve map view result: {map_view_results}")
+            service_status, map_view_results = self.service_agent.receive_views()
 
-        logging.info(f"start_viewer img_id: {image_id}")
+        if service_status:
+            logging.debug(f"Retrieved map view result")
+            map_pos = map_view_results.pos
+            front_img = map_view_results.front_img
+            rear_img = map_view_results.rear_img
+            map_img = map_view_results.map_img
 
-        map_img_path = self.get_map_img_path(image_id)
-        logging.debug(f"map_img_path: {map_img_path}")
-        self.img_map_view = self.resize_image(map_img_path, self.map_view_size)
-        self.cvs_map_view.itemconfig(self.img_map_id, image=self.img_map_view)
+            self.img_map_view = self.resize_map_view(map_img, self.map_view_size)
+            self.cvs_map_view.itemconfig(self.img_map_id, image=self.img_map_view)
+            self.img_front_view = self.resize_map_view(front_img, self.sight_view_size)
+            self.cvs_front_view.itemconfig(self.img_front_id, image=self.img_front_view)
+            self.img_rear_view = self.resize_map_view(rear_img, self.sight_view_size)
+            self.cvs_rear_view.itemconfig(self.img_rear_id, image=self.img_rear_view)
 
-        front_img_path = self.get_front_img_path(image_id)
-        logging.debug(f"front_img_path: {front_img_path}")
-        self.img_front_view = self.resize_image(front_img_path, self.sight_view_size)
-        self.cvs_front_view.itemconfig(self.img_front_id, image=self.img_front_view)
+        if not service_status:
+            logging.info(f"start_viewer img_id: {image_id}")
 
-        rear_img_path = self.get_rear_img_path(image_id)
-        logging.debug(f"rear_img_path: {rear_img_path}")
-        self.img_rear_view = self.resize_image(rear_img_path, self.sight_view_size)
-        self.cvs_rear_view.itemconfig(self.img_rear_id, image=self.img_rear_view)
+            map_img_path = self.get_map_img_path(image_id)
+            logging.debug(f"map_img_path: {map_img_path}")
+            self.img_map_view = self.resize_image(map_img_path, self.map_view_size)
+            self.cvs_map_view.itemconfig(self.img_map_id, image=self.img_map_view)
+
+            front_img_path = self.get_front_img_path(image_id)
+            logging.debug(f"front_img_path: {front_img_path}")
+            self.img_front_view = self.resize_image(front_img_path, self.sight_view_size)
+            self.cvs_front_view.itemconfig(self.img_front_id, image=self.img_front_view)
+
+            rear_img_path = self.get_rear_img_path(image_id)
+            logging.debug(f"rear_img_path: {rear_img_path}")
+            self.img_rear_view = self.resize_image(rear_img_path, self.sight_view_size)
+            self.cvs_rear_view.itemconfig(self.img_rear_id, image=self.img_rear_view)
 
     def exit_viewer(self, ):
         try:

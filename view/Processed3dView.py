@@ -1,3 +1,5 @@
+import os
+
 from PIL import Image
 import numpy as np
 from time import time
@@ -9,6 +11,8 @@ from matplotlib import pyplot as plt
 import json
 import rpyc
 import logging
+import base64
+from io import BytesIO
 
 
 class ViewTaskAgent():
@@ -27,8 +31,7 @@ class ViewTaskAgent():
 
     def disconnect(self):
         try:
-            if self.connected:
-                self.conn.close()
+            self.conn.close()
         except Exception:
             logging.error("Connect rpyc server error", exc_info=True)
         finally:
@@ -36,12 +39,15 @@ class ViewTaskAgent():
 
     def request_view_task(self):
         success = True
+
+        self.connect()
         try:
             results = self.conn.root.retrieve_view_task()
             if results["state_err"] == "ok":
                 pos = results["pos"]
                 logging.info(f"Request view task at pos: {pos} ok")
             else:
+                success = False
                 logging.info(f"Failed to request view task")
         except Exception:
             logging.error("Request view task error", exc_info=True)
@@ -49,19 +55,31 @@ class ViewTaskAgent():
 
         return (success, results)
 
+    def img_to_b64(self, img, format="PNG"):
+        img_file = BytesIO()
+        img.save(img_file, format=format)
+        img_bytes = img_file.getvalue()
+        img_b64 = base64.b64encode(img_bytes)
+        return img_b64
+
     def reply_view_task(self, pos=None, front_img=None, rear_img=None, map_img=None):
         success = True
-        results = None
 
+        self.connect()
         try:
             if front_img is None or rear_img is None or map_img is None:
                 reply_msg = None
             else:
-                reply_msg = {"pos": pos, "front_img": front_img, "rear_img": rear_img,
-                             "map_img": map_img}
+                front_img_str = self.img_to_b64(front_img)
+                rear_img_str = self.img_to_b64(rear_img)
+                map_img_str = self.img_to_b64(map_img)
+
+                reply_msg = {"pos": pos, "front_img": front_img_str,
+                             "rear_img": rear_img_str,
+                             "map_img": map_img_str}
 
             results = self.conn.root.complete_view_task(reply_msg)
-            if results["state_err"] == "response ok":
+            if results["state_err"] == "ok":
                 pos = results["pos"]
                 logging.info(f"Reply view task at pos: {pos} ok")
             else:
@@ -71,13 +89,16 @@ class ViewTaskAgent():
             logging.error("Reply view task error", exc_info=True)
             success = False
 
-        return (success, results)
+        return success
 
 
 class ViewProcessor3D():
 
-    def __init__(self):
-        self. xyz_data_results = []
+    def __init__(self, service_agent):
+        self.service_agent = service_agent
+        self.xyz_data_results = []
+        self.window_width = 640
+        self.window_height = 480
 
     def collect_result(self, result):
         self.xyz_data_results.append(result)
@@ -125,7 +146,7 @@ class ViewProcessor3D():
         y_start = grid_y * slice_y
         y_end = min((grid_y + 1) * slice_y, size_y)
 
-        #print(f"grid_x: {grid_x}, grid_y: {grid_y}")
+        # print(f"grid_x: {grid_x}, grid_y: {grid_y}")
         # print(f"x_start: {x_start}, x_end: {x_end}")
         # print(f"y_start: {y_start}, y_end: {y_end}")
 
@@ -154,7 +175,6 @@ class ViewProcessor3D():
 
         return zyz_np_arr
 
-
     def read_2d_map_image(self, imag_file):
         image = Image.open(imag_file).transpose(Image.ROTATE_270)
         print(f"map_img: {imag_file}, format: {image.format}, size: {image.size}")
@@ -163,7 +183,7 @@ class ViewProcessor3D():
 
     def read_pts_3d(self, map_img):
         pts_data = np.asarray(map_img)
-        #pts_data = np.moveaxis(pts_data, 0, -1)
+        # pts_data = np.moveaxis(pts_data, 0, -1)
         print(f"pts_data: {pts_data.shape}, type: {type(pts_data)}")
 
         t_start = time()
@@ -176,7 +196,6 @@ class ViewProcessor3D():
 
         return xyz_3d
 
-
     def locate_origin_point(self, min_x, min_y, map_factor_x=0.5, map_factor_y=0.5):
         pos_x = math.ceil(abs(0 - min_x) * map_factor_x)
         pos_y = math.ceil(abs(0 - min_y) * map_factor_y)
@@ -186,7 +205,6 @@ class ViewProcessor3D():
         print(f"Origin point: {origin_pt}")
 
         return origin_pt
-
 
     def locate_point(self, real_x, real_y, min_x, min_y, map_factor_x=0.5, map_factor_y=0.5):
         pos_x = math.ceil(abs(real_x - min_x) * map_factor_x)
@@ -198,13 +216,11 @@ class ViewProcessor3D():
 
         return map_pt
 
-
     def check_pts_3d(self, pts_3d):
         limit = 5
         for idx, xyz in enumerate(pts_3d):
             if idx < limit:
                 print(xyz)
-
 
     def convert_to_pcd_data(self, pts_3d):
         pcd_data = o3d.geometry.PointCloud()
@@ -212,32 +228,27 @@ class ViewProcessor3D():
 
         return pcd_data
 
-
     def show_pts_3d(self, pts_3d):
         pcd = self.convert_to_pcd_data(pts_3d)
 
         o3d.visualization.draw_geometries([pcd], mesh_show_wireframe=True)
-
 
     def save_pcd_data(self, pts_3d, pcd_file):
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(pts_3d)
         o3d.io.write_point_cloud(pcd_file, pcd)
 
-
     def show_pcd_file(self, pcd_file):
         pcd = o3d.io.read_point_cloud(pcd_file)
         o3d.visualization.draw_geometries([pcd], mesh_show_wireframe=True)
-
 
     def show_pcd_data(self, pcd_data):
         vis = o3d.visualization.Visualizer()
         vis.create_window()
         vis.add_geometry(pcd_data)
-        #vis.get_render_option().load_from_json("renderoption.json")
+        # vis.get_render_option().load_from_json("renderoption.json")
         vis.run()
         vis.destroy_window()
-
 
     def show_pcd_data_with_key_callback(self, pcd_data):
 
@@ -276,7 +287,6 @@ class ViewProcessor3D():
             ctr.convert_from_pinhole_camera_parameters(camera_params)
             return False
 
-
         key_to_callback = {}
         key_to_callback[ord("K")] = change_background_to_black
         key_to_callback[ord("S")] = save_render_option
@@ -286,11 +296,8 @@ class ViewProcessor3D():
         key_to_callback[ord("P")] = save_view_trajectory
         key_to_callback[ord("V")] = load_view_trajectory
 
-        window_width = 640
-        window_height = 480
-
         vis = o3d.visualization.VisualizerWithKeyCallback()
-        vis.create_window(width=window_width, height=window_height)
+        vis.create_window(width=self.window_width, height=self.window_height)
         vis.add_geometry(pcd_data)
         for key, callback in key_to_callback.items():
             vis.register_key_callback(key, callback)
@@ -298,6 +305,39 @@ class ViewProcessor3D():
         vis.run()
         vis.destroy_window()
 
+    def start_processor_viewer(self, pcd_data):
+        vis = o3d.visualization.Visualizer()
+        vis.create_window(width=self.window_width, height=self.window_height)
+        vis.add_geometry(pcd_data)
+
+        completed_tasks = False
+
+        while not completed_tasks:
+            # Request view task
+            task_status, view_task = self.service_agent.request_view_task()
+            if task_status:
+                logging.info(f"Received task: {task_status}")
+
+            #vis.update_geometry(pcd_data)
+            vis.poll_events()
+            vis.update_renderer()
+
+            if task_status:
+                pos = (0, 0)
+                front_img_path = os.path.join(os.path.join(os.getcwd(), 'images'), "front_image.png")
+                rear_img_path = os.path.join(os.path.join(os.getcwd(), 'images'), "rear_image.png")
+                map_img_path = os.path.join(os.path.join(os.getcwd(), 'images'), "map_image.png")
+
+                front_img = Image.open(front_img_path)
+                rear_img = Image.open(rear_img_path)
+                map_img = Image.open(map_img_path)
+                task_status = self.service_agent.reply_view_task(pos=pos, front_img=front_img,
+                                                                            rear_img=rear_img, map_img=map_img)
+
+            completed_tasks = True
+
+        self.service_agent.disconnect()
+        vis.destroy_window()
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG,
@@ -308,7 +348,9 @@ if __name__ == "__main__":
                         ])
     logging.info("Start Processed 3D Viewer")
 
-    viewer = ViewProcessor3D()
+    agent = ViewTaskAgent()
+
+    viewer = ViewProcessor3D(agent)
 
     map_img = viewer.read_2d_map_image("..\\data\\processed\\merged_gray_images.png")
     pts = viewer.read_pts_3d(map_img)
@@ -326,10 +368,10 @@ if __name__ == "__main__":
 
     check_point = viewer.locate_point(check_x, check_y, min_x=min_x, min_y=min_y)
 
-    #show_pts_3d(pts)
+    # show_pts_3d(pts)
 
     pcd_data = viewer.convert_to_pcd_data(pts)
 
-    #show_pcd_data(pcd_data)
-    viewer.show_pcd_data_with_key_callback(pcd_data)
-
+    # show_pcd_data(pcd_data)
+    #viewer.show_pcd_data_with_key_callback(pcd_data)
+    viewer.start_processor_viewer(pcd_data)

@@ -13,6 +13,17 @@ import rpyc
 import logging
 import base64
 from io import BytesIO
+from time import time, sleep
+
+
+class MapViewTask():
+
+    def __init__(self):
+        self.pos = (0, 0)
+
+        self.front_img = None
+        self.rear_img = None
+        self.map_img = None
 
 
 class ViewTaskAgent():
@@ -39,21 +50,22 @@ class ViewTaskAgent():
 
     def request_view_task(self):
         success = True
+        view_task = MapViewTask()
 
         self.connect()
         try:
             results = self.conn.root.retrieve_view_task()
             if results["state_err"] == "ok":
-                pos = results["pos"]
-                logging.info(f"Request view task at pos: {pos} ok")
+                view_task.pos = results["pos"]
+                logging.info(f"Request view task at pos: {view_task.pos} ok")
             else:
                 success = False
-                logging.info(f"Failed to request view task")
+                #logging.info(f"Failed to request view task")
         except Exception:
             logging.error("Request view task error", exc_info=True)
             success = False
 
-        return (success, results)
+        return (success, view_task)
 
     def img_to_b64(self, img, format="PNG"):
         img_file = BytesIO()
@@ -94,11 +106,19 @@ class ViewTaskAgent():
 
 class ViewProcessor3D():
 
-    def __init__(self, service_agent):
+    def __init__(self, service_agent, map_path, min_x = -5120, min_y = -6144,
+                 map_factor_x = 0.5, map_factor_y = 0.5):
         self.service_agent = service_agent
         self.xyz_data_results = []
-        self.window_width = 640
-        self.window_height = 480
+
+        self.running_tasks = True
+
+        self.map_source_img = self.read_2d_map_image(map_path)
+        self.window_width = int(self.map_source_img.size[0] * 0.1)
+        self.window_height = int(self.map_source_img.size[1] * 0.1)
+        self.locate_origin_point(min_x=min_x, min_y=min_y,
+                                 map_factor_x=map_factor_x, map_factor_y=map_factor_y)
+        self.pos_marker_img = Image.open(self.get_image_path("car_marker_sample.png"))
 
     def collect_result(self, result):
         self.xyz_data_results.append(result)
@@ -181,8 +201,8 @@ class ViewProcessor3D():
 
         return image
 
-    def read_pts_3d(self, map_img):
-        pts_data = np.asarray(map_img)
+    def read_pts_3d(self):
+        pts_data = np.asarray(self.map_source_img)
         # pts_data = np.moveaxis(pts_data, 0, -1)
         print(f"pts_data: {pts_data.shape}, type: {type(pts_data)}")
 
@@ -197,24 +217,47 @@ class ViewProcessor3D():
         return xyz_3d
 
     def locate_origin_point(self, min_x, min_y, map_factor_x=0.5, map_factor_y=0.5):
-        pos_x = math.ceil(abs(0 - min_x) * map_factor_x)
-        pos_y = math.ceil(abs(0 - min_y) * map_factor_y)
+        map_scale_x = self.window_width / self.map_source_img.size[0]
+        map_scale_y = self.window_height / self.map_source_img.size[1]
 
-        origin_pt = (pos_x, pos_y, 0)
+        pos_x = math.ceil(abs(0 - min_x) * map_factor_x * map_scale_x)
+        pos_y = math.ceil(abs(0 - min_y) * map_factor_y * map_scale_y)
 
-        print(f"Origin point: {origin_pt}")
+        self.orgin_pos = (pos_x, pos_y)
+        self.map_total_factor = (map_factor_x * map_scale_x , map_factor_y * map_scale_y)
+        self.min_xy = (min_x, min_y)
 
-        return origin_pt
+        print(f"Origin point: {self.orgin_pos}")
 
-    def locate_point(self, real_x, real_y, min_x, min_y, map_factor_x=0.5, map_factor_y=0.5):
-        pos_x = math.ceil(abs(real_x - min_x) * map_factor_x)
-        pos_y = math.ceil(abs(real_y - min_y) * map_factor_y)
+        return self.orgin_pos
 
-        map_pt = (pos_x, pos_y, 0)
+    def locate_point(self, pos=(0, 0)):
+        input_x, input_y = pos
+        factor_x, factor_y = self.map_total_factor
+        min_x, min_y = self.min_xy
 
-        print(f"Mapped point: {map_pt} for real point ({real_x}, {real_y})")
+        pos_x = math.ceil(abs(input_x - min_x) * factor_x)
+        pos_y = math.ceil(abs(input_y - min_y) * factor_y)
 
-        return map_pt
+        map_pos = (pos_x, pos_y)
+
+        print(f"Mapped point: {map_pos} for point {pos}")
+
+        return map_pos
+
+    # Compute moving pixels regarding to origin point
+    def locate_moving_distance(self, pos=(0, 0)):
+        map_pos_x, map_pos_y = self.locate_point(pos)
+        origin_x, origin_y = self.orgin_pos
+
+        move_x = map_pos_x - origin_x
+        move_y = map_pos_y - origin_y
+
+        move_pos = (move_x, move_y)
+
+        print(f"Moving: {move_pos} for point {pos}")
+
+        return move_pos
 
     def check_pts_3d(self, pts_3d):
         limit = 5
@@ -305,39 +348,73 @@ class ViewProcessor3D():
         vis.run()
         vis.destroy_window()
 
+
+    def generate_view_image(self, vis3d, pos, camera_params):
+        ctr3d = vis3d.get_view_control()
+        ctr3d.convert_from_pinhole_camera_parameters(camera_params)
+        #ctr3d.translate()
+
+
+    def get_image_path(self, image_filename):
+        return os.path.join(os.path.join(os.getcwd(), 'images'), image_filename)
+
+    def generate_map_image(self, vis3d):
+        render_option_path = os.path.join(os.path.join(os.getcwd(), 'config'), "base_renderoption.json")
+        vis3d.get_render_option().load_from_json(render_option_path)
+        ctr3d = vis3d.get_view_control()
+        ctr3d.set_zoom(0.5)
+
+        vis3d.poll_events()
+        vis3d.update_renderer()
+
+        map_temp_path = self.get_image_path("map_image_tmp.png")
+        o3d_image = vis3d.capture_screen_image(map_temp_path, do_render=True)
+        map_image = Image.open(map_temp_path)
+
+        return map_image
+
+    def generate_map_image_with_marker(self, map_image, pos=(0, 0)):
+        map_pos = self.locate_point(pos)
+        map_image.paste(self.pos_marker_img, map_pos, self.pos_marker_img)
+
+        return map_image
+
     def start_processor_viewer(self, pcd_data):
         vis = o3d.visualization.Visualizer()
         vis.create_window(width=self.window_width, height=self.window_height)
         vis.add_geometry(pcd_data)
+        self.map_image = self.generate_map_image(vis)
 
-        completed_tasks = False
+        self.running_tasks = True
 
-        while not completed_tasks:
+        while self.running_tasks:
             # Request view task
             task_status, view_task = self.service_agent.request_view_task()
+
             if task_status:
                 logging.info(f"Received task: {task_status}")
 
-            #vis.update_geometry(pcd_data)
-            vis.poll_events()
-            vis.update_renderer()
-
-            if task_status:
-                pos = (0, 0)
                 front_img_path = os.path.join(os.path.join(os.getcwd(), 'images'), "front_image.png")
                 rear_img_path = os.path.join(os.path.join(os.getcwd(), 'images'), "rear_image.png")
-                map_img_path = os.path.join(os.path.join(os.getcwd(), 'images'), "map_image.png")
+                #map_img_path = os.path.join(os.path.join(os.getcwd(), 'images'), "map_image.png")
 
-                front_img = Image.open(front_img_path)
-                rear_img = Image.open(rear_img_path)
-                map_img = Image.open(map_img_path)
-                task_status = self.service_agent.reply_view_task(pos=pos, front_img=front_img,
-                                                                            rear_img=rear_img, map_img=map_img)
-
-            completed_tasks = True
+                view_task.front_img = Image.open(front_img_path)
+                view_task.rear_img = Image.open(rear_img_path)
+                #view_task.map_img = Image.open(map_img_path)
+                view_task.map_img = self.generate_map_image_with_marker(self.map_image, view_task.pos)
+                task_status = self.service_agent.reply_view_task(pos=view_task.pos,
+                                                                 front_img=view_task.front_img,
+                                                                 rear_img=view_task.rear_img,
+                                                                 map_img=view_task.map_img)
+            #vis.update_geometry(pcd_data)
+            # Check whether user stopped application window
+            self.running_tasks = vis.poll_events()
+            vis.update_renderer()
+            sleep(2)
 
         self.service_agent.disconnect()
         vis.destroy_window()
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG,
@@ -350,23 +427,19 @@ if __name__ == "__main__":
 
     agent = ViewTaskAgent()
 
-    viewer = ViewProcessor3D(agent)
-
-    map_img = viewer.read_2d_map_image("..\\data\\processed\\merged_gray_images.png")
-    pts = viewer.read_pts_3d(map_img)
-
     # Compute from scan3dview
     min_x = -5120
     min_y = -6144
 
-    size_x, size_y = map_img.size
+    map_path = "..\\data\\processed\\merged_gray_images.png"
 
-    origin_point = viewer.locate_origin_point(min_x=min_x, min_y=min_y)
+    viewer = ViewProcessor3D(agent, map_path, min_x=min_x, min_y=min_y)
 
-    check_x = 10
-    check_y = 10
+    pts = viewer.read_pts_3d()
 
-    check_point = viewer.locate_point(check_x, check_y, min_x=min_x, min_y=min_y)
+    check_pos = (10, 10)
+
+    moving_distance = viewer.locate_moving_distance(pos=check_pos)
 
     # show_pts_3d(pts)
 

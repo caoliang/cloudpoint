@@ -35,7 +35,8 @@ class MapAgent():
 
     def disconnect(self):
         try:
-            self.conn.close()
+            if self.conn:
+                self.conn.close()
         except Exception:
             logging.error("Connect rpyc server error", exc_info=True)
         finally:
@@ -94,9 +95,12 @@ class MapViewer():
 
     def __init__(self, service_agent):
         self.service_agent = service_agent
-        self.main_window_size = "800x640"
+        self.main_window_size = "1080x640"
         self.sight_view_size = (380, 230)
-        self.map_view_size = (380, 500)
+        self.map_view_size = (640, 480)
+        self.pos_list = [(0, 0), (0, 10), (0, 20), (0, 30),
+                         (0, 20), (0, 10), (0, 0)]
+        self.step_index = 0
 
     def get_img_path(self, img_filename, image_id=0):
         img_folder = os.path.join(os.getcwd(), 'images')
@@ -139,20 +143,25 @@ class MapViewer():
 
     def stop_viewer(self):
         self.service_agent.disconnect()
+        self.step_index = 0
 
 
-    def start_viewer(self, image_id=1):
+    def start_viewer(self):
+        if self.step_index >= len(self.pos_list):
+            self.step_index = 0
+
         logging.info(f"Request map view from agent")
-        service_status = self.service_agent.request_views(pos=(0, 1))
+        step_pos = self.pos_list[self.step_index]
+        service_status = self.service_agent.request_views(pos=step_pos)
         map_view_results = None
         if service_status:
-            # Wait for 0.1 seconds then try retrieve map view reply
-            sleep(0.1)
+            # Wait for 2 seconds then try retrieve map view reply
+            sleep(2)
             logging.info(f"Retrieve map view from agent")
             service_status, map_view_results = self.service_agent.receive_views()
 
         if service_status:
-            logging.debug(f"Retrieved map view result")
+            logging.debug(f"Map view result retrieved")
             map_pos = map_view_results.pos
             front_img = map_view_results.front_img
             rear_img = map_view_results.rear_img
@@ -165,23 +174,25 @@ class MapViewer():
             self.img_rear_view = self.resize_map_view(rear_img, self.sight_view_size)
             self.cvs_rear_view.itemconfig(self.img_rear_id, image=self.img_rear_view)
 
-        if not service_status:
-            logging.info(f"start_viewer img_id: {image_id}")
+            self.step_index = self.step_index + 1
 
-            map_img_path = self.get_map_img_path(image_id)
-            logging.debug(f"map_img_path: {map_img_path}")
-            self.img_map_view = self.resize_image(map_img_path, self.map_view_size)
-            self.cvs_map_view.itemconfig(self.img_map_id, image=self.img_map_view)
-
-            front_img_path = self.get_front_img_path(image_id)
-            logging.debug(f"front_img_path: {front_img_path}")
-            self.img_front_view = self.resize_image(front_img_path, self.sight_view_size)
-            self.cvs_front_view.itemconfig(self.img_front_id, image=self.img_front_view)
-
-            rear_img_path = self.get_rear_img_path(image_id)
-            logging.debug(f"rear_img_path: {rear_img_path}")
-            self.img_rear_view = self.resize_image(rear_img_path, self.sight_view_size)
-            self.cvs_rear_view.itemconfig(self.img_rear_id, image=self.img_rear_view)
+        # if not service_status:
+        #     logging.info(f"start_viewer img_id: {image_id}")
+        #
+        #     map_img_path = self.get_map_img_path(image_id)
+        #     logging.debug(f"map_img_path: {map_img_path}")
+        #     self.img_map_view = self.resize_image(map_img_path, self.map_view_size)
+        #     self.cvs_map_view.itemconfig(self.img_map_id, image=self.img_map_view)
+        #
+        #     front_img_path = self.get_front_img_path(image_id)
+        #     logging.debug(f"front_img_path: {front_img_path}")
+        #     self.img_front_view = self.resize_image(front_img_path, self.sight_view_size)
+        #     self.cvs_front_view.itemconfig(self.img_front_id, image=self.img_front_view)
+        #
+        #     rear_img_path = self.get_rear_img_path(image_id)
+        #     logging.debug(f"rear_img_path: {rear_img_path}")
+        #     self.img_rear_view = self.resize_image(rear_img_path, self.sight_view_size)
+        #     self.cvs_rear_view.itemconfig(self.img_rear_id, image=self.img_rear_view)
 
     def exit_viewer(self, ):
         try:
@@ -233,9 +244,11 @@ class MapViewer():
                                               style="viewer.TLabel")
         self.lbl_front_view_title.grid(column=0, row=0, sticky=(tk.N, tk.W, tk.E, tk.S))
 
-        front_img_path = self.get_front_img_path()
-        logging.debug(f"front_img_path: {front_img_path}")
-        self.img_front_view = self.resize_image(front_img_path, self.sight_view_size)
+        #front_img_path = self.get_front_img_path()
+        #logging.debug(f"front_img_path: {front_img_path}")
+        #self.img_front_view = self.resize_image(front_img_path, self.sight_view_size)
+
+        self.img_front_view = ImageTk.PhotoImage(Image.new('RGB', self.sight_view_size))
 
         self.cvs_front_view = tk.Canvas(master=self.frm_left_top, bd=0, highlightthickness=0, bg="white",
                                         width=self.sight_view_size[0], height=self.sight_view_size[1])
@@ -250,9 +263,11 @@ class MapViewer():
                                              style="viewer.TLabel")
         self.lbl_rear_view_title.grid(column=0, row=2, sticky=(tk.N, tk.W, tk.E, tk.S))
 
-        rear_img_path = self.get_rear_img_path()
-        logging.debug(f"rear_img_path: {rear_img_path}")
-        self.img_rear_view = self.resize_image(rear_img_path, self.sight_view_size)
+        #rear_img_path = self.get_rear_img_path()
+        #logging.debug(f"rear_img_path: {rear_img_path}")
+        #self.img_rear_view = self.resize_image(rear_img_path, self.sight_view_size)
+
+        self.img_rear_view = ImageTk.PhotoImage(Image.new('RGB', self.sight_view_size))
 
         self.cvs_rear_view = tk.Canvas(master=self.frm_left_bottom, bd=0, highlightthickness=0, bg="white",
                                        width=self.sight_view_size[0], height=self.sight_view_size[1])
@@ -268,9 +283,11 @@ class MapViewer():
                                             style="viewer.TLabel")
         self.lbl_map_view_title.grid(column=0, row=0, sticky=(tk.N, tk.W, tk.E, tk.S))
 
-        map_img_path = self.get_map_img_path()
-        logging.debug(f"map_img_path: {map_img_path}")
-        self.img_map_view = self.resize_image(map_img_path, self.map_view_size)
+        #map_img_path = self.get_map_img_path()
+        #logging.debug(f"map_img_path: {map_img_path}")
+        #self.img_map_view = self.resize_image(map_img_path, self.map_view_size)
+
+        self.img_map_view = ImageTk.PhotoImage(Image.new('RGB', self.map_view_size))
 
         self.cvs_map_view = tk.Canvas(master=self.frm_right_center, bd=0, highlightthickness=0, bg="white",
                                       width=self.map_view_size[0], height=self.map_view_size[1])

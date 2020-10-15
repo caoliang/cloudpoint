@@ -1,5 +1,5 @@
 {
-	"background_color" : [ 0.0, 0.0, 0.0 ],
+	"background_color" : [ 1.0, 1.0, 1.0 ],
 	"class_name" : "RenderOption",
 	"default_mesh_color" : [ 0.69999999999999996, 0.69999999999999996, 0.69999999999999996 ],
 	"image_max_depth" : 3000,

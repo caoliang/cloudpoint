@@ -98,9 +98,30 @@ class MapViewer():
         self.main_window_size = "1080x640"
         self.sight_view_size = (380, 230)
         self.map_view_size = (640, 480)
-        self.pos_list = [(0, 0), (0, 10), (0, 20), (0, 30),
-                         (0, 20), (0, 10), (0, 0)]
+        self.pos_list = []
+        self.read_tracking_tasks()
         self.step_index = 0
+        self.tracking_task = False
+        self.current_task_view = None
+
+    def read_tracking_tasks(self):
+        tracking_filepath = self.get_file_path("config", "tracking_tasks.txt")
+        with open(tracking_filepath, "r") as track_file:
+            lines = track_file.readlines()
+
+        for line in lines:
+            line_text = line.strip()
+            if line_text != "" and line_text[0] != "#" and "," in line_text:
+                pos_list = line_text.split(",")
+                pos_x = int(pos_list[0].strip())
+                pos_y = int(pos_list[1].strip())
+                self.pos_list.append((pos_x, pos_y))
+
+
+    def get_file_path(self, folder_name, filename):
+        folder = os.path.join(os.getcwd(), folder_name)
+        file_path = os.path.join(folder, filename)
+        return file_path
 
     def get_img_path(self, img_filename, image_id=0):
         img_folder = os.path.join(os.getcwd(), 'images')
@@ -142,11 +163,18 @@ class MapViewer():
         return photo_img
 
     def stop_viewer(self):
+        logging.info(f"Stop to track map view")
         self.service_agent.disconnect()
         self.step_index = 0
-
+        self.tracking_task = False
 
     def start_viewer(self):
+        logging.info(f"Start to track map view")
+        self.tracking_task = True
+        self.update_viewer()
+
+    def update_viewer(self):
+        logging.info(f"Update map view in tracking steps")
         if self.step_index >= len(self.pos_list):
             self.step_index = 0
 
@@ -156,43 +184,35 @@ class MapViewer():
         map_view_results = None
         if service_status:
             # Wait for 2 seconds then try retrieve map view reply
-            sleep(2)
+            sleep(0.2)
             logging.info(f"Retrieve map view from agent")
             service_status, map_view_results = self.service_agent.receive_views()
 
         if service_status:
             logging.debug(f"Map view result retrieved")
-            map_pos = map_view_results.pos
-            front_img = map_view_results.front_img
-            rear_img = map_view_results.rear_img
-            map_img = map_view_results.map_img
+            self.current_task_view = map_view_results
+            map_pos = self.current_task_view.pos
+            front_img = self.current_task_view.front_img
+            rear_img = self.current_task_view.rear_img
+            map_img = self.current_task_view.map_img
 
             self.img_map_view = self.resize_map_view(map_img, self.map_view_size)
-            self.cvs_map_view.itemconfig(self.img_map_id, image=self.img_map_view)
+            self.lbl_map_view.config(image=self.img_map_view)
+            #self.cvs_map_view.itemconfig(self.img_map_id, image=self.img_map_view)
             self.img_front_view = self.resize_map_view(front_img, self.sight_view_size)
-            self.cvs_front_view.itemconfig(self.img_front_id, image=self.img_front_view)
+            self.lbl_front_view.config(image=self.img_front_view)
+            #self.cvs_front_view.itemconfig(self.img_front_id, image=self.img_front_view)
             self.img_rear_view = self.resize_map_view(rear_img, self.sight_view_size)
-            self.cvs_rear_view.itemconfig(self.img_rear_id, image=self.img_rear_view)
+            self.lbl_rear_view.config(image=self.img_rear_view)
+            #self.cvs_rear_view.itemconfig(self.img_rear_id, image=self.img_rear_view)
+
+            self.mainframe.update()
 
             self.step_index = self.step_index + 1
 
-        # if not service_status:
-        #     logging.info(f"start_viewer img_id: {image_id}")
-        #
-        #     map_img_path = self.get_map_img_path(image_id)
-        #     logging.debug(f"map_img_path: {map_img_path}")
-        #     self.img_map_view = self.resize_image(map_img_path, self.map_view_size)
-        #     self.cvs_map_view.itemconfig(self.img_map_id, image=self.img_map_view)
-        #
-        #     front_img_path = self.get_front_img_path(image_id)
-        #     logging.debug(f"front_img_path: {front_img_path}")
-        #     self.img_front_view = self.resize_image(front_img_path, self.sight_view_size)
-        #     self.cvs_front_view.itemconfig(self.img_front_id, image=self.img_front_view)
-        #
-        #     rear_img_path = self.get_rear_img_path(image_id)
-        #     logging.debug(f"rear_img_path: {rear_img_path}")
-        #     self.img_rear_view = self.resize_image(rear_img_path, self.sight_view_size)
-        #     self.cvs_rear_view.itemconfig(self.img_rear_id, image=self.img_rear_view)
+        # Schedule to refresh to get next step
+        if self.tracking_task:
+            self.btn_start_track.after(5000, self.update_viewer)
 
     def exit_viewer(self, ):
         try:
@@ -210,6 +230,7 @@ class MapViewer():
         self.sty_frame = ttk.Style()
         self.sty_frame.configure('viewer.TFrame', background='white')
         self.sty_frame.configure('viewer.TLabel', background='white', font=('Helvetica', 16))
+        self.sty_frame.configure('image.TLabel', background='white')
         self.sty_frame.configure('viewer.main.TLabel', background='white', font=('Helvetica', 26))
         self.sty_frame.configure('viewer.TButton', font=('Helvetica', 14))
 
@@ -249,12 +270,14 @@ class MapViewer():
         #self.img_front_view = self.resize_image(front_img_path, self.sight_view_size)
 
         self.img_front_view = ImageTk.PhotoImage(Image.new('RGB', self.sight_view_size))
+        self.lbl_front_view = ttk.Label(master=self.frm_left_top, image=self.img_front_view, style="image.TLabel")
+        self.lbl_front_view.grid(column=0, row=1, sticky=(tk.N, tk.W, tk.E, tk.S))
 
-        self.cvs_front_view = tk.Canvas(master=self.frm_left_top, bd=0, highlightthickness=0, bg="white",
-                                        width=self.sight_view_size[0], height=self.sight_view_size[1])
-        self.img_front_id = self.cvs_front_view.create_image(0, 0, image=self.img_front_view,
-                                                             anchor=tk.NW, tags="FRONT_IMG")
-        self.cvs_front_view.grid(column=0, row=1, sticky=(tk.N, tk.W, tk.E, tk.S))
+        #self.cvs_front_view = tk.Canvas(master=self.frm_left_top, bd=0, highlightthickness=0, bg="white",
+        #                                width=self.sight_view_size[0], height=self.sight_view_size[1])
+        #self.img_front_id = self.cvs_front_view.create_image(0, 0, image=self.img_front_view,
+        #                                                     anchor=tk.NW, tags="FRONT_IMG")
+        #self.cvs_front_view.grid(column=0, row=1, sticky=(tk.N, tk.W, tk.E, tk.S))
 
         self.frm_left_bottom = ttk.Frame(master=self.frm_left_center, style="viewer.TFrame")
         self.frm_left_bottom.grid(column=0, row=1, sticky=(tk.N, tk.W, tk.E, tk.S))
@@ -268,12 +291,14 @@ class MapViewer():
         #self.img_rear_view = self.resize_image(rear_img_path, self.sight_view_size)
 
         self.img_rear_view = ImageTk.PhotoImage(Image.new('RGB', self.sight_view_size))
+        self.lbl_rear_view = ttk.Label(master=self.frm_left_bottom, image=self.img_rear_view, style="image.TLabel")
+        self.lbl_rear_view.grid(column=0, row=3, sticky=(tk.N, tk.W, tk.E, tk.S))
 
-        self.cvs_rear_view = tk.Canvas(master=self.frm_left_bottom, bd=0, highlightthickness=0, bg="white",
-                                       width=self.sight_view_size[0], height=self.sight_view_size[1])
-        self.img_rear_id = self.cvs_rear_view.create_image(0, 0, image=self.img_rear_view, anchor=tk.NW,
-                                                           tags="REAR_IMG")
-        self.cvs_rear_view.grid(column=0, row=3, sticky=(tk.N, tk.W, tk.E, tk.S))
+        #self.cvs_rear_view = tk.Canvas(master=self.frm_left_bottom, bd=0, highlightthickness=0, bg="white",
+        #                               width=self.sight_view_size[0], height=self.sight_view_size[1])
+        #self.img_rear_id = self.cvs_rear_view.create_image(0, 0, image=self.img_rear_view, anchor=tk.NW,
+        #                                                   tags="REAR_IMG")
+        #self.cvs_rear_view.grid(column=0, row=3, sticky=(tk.N, tk.W, tk.E, tk.S))
 
         self.frm_right_center = ttk.Frame(master=self.frm_center, relief=tk.SOLID, borderwidth=1,
                                           style="viewer.TFrame")
@@ -288,11 +313,13 @@ class MapViewer():
         #self.img_map_view = self.resize_image(map_img_path, self.map_view_size)
 
         self.img_map_view = ImageTk.PhotoImage(Image.new('RGB', self.map_view_size))
+        self.lbl_map_view = ttk.Label(master=self.frm_right_center, image=self.img_map_view, style="image.TLabel")
+        self.lbl_map_view.grid(column=0, row=1, sticky=(tk.N, tk.W, tk.E, tk.S))
 
-        self.cvs_map_view = tk.Canvas(master=self.frm_right_center, bd=0, highlightthickness=0, bg="white",
-                                      width=self.map_view_size[0], height=self.map_view_size[1])
-        self.img_map_id = self.cvs_map_view.create_image(0, 0, image=self.img_map_view, anchor=tk.NW, tags="MAP_IMG")
-        self.cvs_map_view.grid(column=0, row=1, sticky=(tk.N, tk.W, tk.E, tk.S))
+        #self.cvs_map_view = tk.Canvas(master=self.frm_right_center, bd=0, highlightthickness=0, bg="white",
+        #                              width=self.map_view_size[0], height=self.map_view_size[1])
+        #self.img_map_id = self.cvs_map_view.create_image(0, 0, image=self.img_map_view, anchor=tk.NW, tags="MAP_IMG")
+        #self.cvs_map_view.grid(column=0, row=1, sticky=(tk.N, tk.W, tk.E, tk.S))
 
         # Bottom Frame
         self.frm_bottom = ttk.Frame(master=self.mainframe, style="viewer.TFrame")

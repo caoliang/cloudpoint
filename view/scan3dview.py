@@ -87,7 +87,7 @@ def show_custom_view(scan_pts, view_config):
     vis.get_render_option().load_from_json(view_config)
 
     ctr = vis.get_view_control()
-    ctr.set_zoom(0.3)
+    ctr.set_zoom(0.5)
 
     vis.run()
     vis.destroy_window()

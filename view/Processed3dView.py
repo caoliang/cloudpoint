@@ -107,18 +107,25 @@ class ViewTaskAgent():
 class ViewProcessor3D():
 
     def __init__(self, service_agent, map_path, min_x = -5120, min_y = -6144,
-                 map_factor_x = 0.5, map_factor_y = 0.5):
+                 max_x = 5120, max_y = 5120, map_factor = 0.5, zoom_factor = 0.5):
         self.service_agent = service_agent
         self.xyz_data_results = []
 
         self.running_tasks = True
-
+        self.zoom_factor = zoom_factor
+        self.map_factor = map_factor
         self.map_source_img = self.read_2d_map_image(map_path)
         self.window_width = int(self.map_source_img.size[0] * 0.1)
         self.window_height = int(self.map_source_img.size[1] * 0.1)
-        self.locate_origin_point(min_x=min_x, min_y=min_y,
-                                 map_factor_x=map_factor_x, map_factor_y=map_factor_y)
-        self.pos_marker_img = Image.open(self.get_image_path("car_marker_sample.png"))
+        self.min_x = min_x
+        self.min_y = min_y
+        self.max_x = max_x
+        self.max_y = max_y
+        self.locate_origin_point()
+        self.locate_origin_point_for_moving()
+        self.pos_marker_img = Image.open(self.get_image_path("car_marker_small.png"))
+        self.map_image = None
+        self.map_with_marker = None
 
     def collect_result(self, result):
         self.xyz_data_results.append(result)
@@ -133,11 +140,11 @@ class ViewProcessor3D():
 
         pieces_x = int(size_x / slice_x) + 1 if size_x % slice_x > 0 else int(size_x / slice_x)
         pieces_y = int(size_y / slice_y) + 1 if size_y % slice_y > 0 else int(size_y / slice_y)
-        print(f"Total grids: {pieces_x} x {pieces_y}")
+        logging.info(f"Total grids: {pieces_x} x {pieces_y}")
 
         grid_xyz_arr = []
 
-        print("Number of processors: ", mp.cpu_count())
+        logging.info("Number of processors: %d", mp.cpu_count())
         pool = mp.Pool(mp.cpu_count())
 
         for grid_x in range(pieces_x):
@@ -151,7 +158,7 @@ class ViewProcessor3D():
         for grid_data in self.xyz_data_results:
             xyz_data = np.vstack((xyz_data, grid_data))
 
-        print("")
+        logging.info("")
 
         return xyz_data
 
@@ -166,22 +173,22 @@ class ViewProcessor3D():
         y_start = grid_y * slice_y
         y_end = min((grid_y + 1) * slice_y, size_y)
 
-        # print(f"grid_x: {grid_x}, grid_y: {grid_y}")
-        # print(f"x_start: {x_start}, x_end: {x_end}")
-        # print(f"y_start: {y_start}, y_end: {y_end}")
+        # logging.info(f"grid_x: {grid_x}, grid_y: {grid_y}")
+        # logging.info(f"x_start: {x_start}, x_end: {x_end}")
+        # logging.info(f"y_start: {y_start}, y_end: {y_end}")
 
         grid_min = np.min(pts_arr[x_start:x_end, y_start:y_end])
         grid_max = np.max(pts_arr[x_start:x_end, y_start:y_end])
         grid_avg = np.average(pts_arr[x_start:x_end, y_start:y_end])
-        # print(f"grid_min: {grid_min}, grid_max: {grid_max}, grid_avg: {grid_avg}")
+        # logging.info(f"grid_min: {grid_min}, grid_max: {grid_max}, grid_avg: {grid_avg}")
 
         if grid_min > 0 and grid_min == grid_max and grid_max == grid_avg:
             pass
-            # print(f"Located empty grid at grid ({grid_x}, {grid_y})")
-            # print(f"Reset empty grid points z value to 0")
+            # logging.info(f"Located empty grid at grid ({grid_x}, {grid_y})")
+            # logging.info(f"Reset empty grid points z value to 0")
             # filtered_pts[x_start:x_end, y_start:y_end] = 0
         else:
-            # print(f"Prepare grid points at grid ({grid_x}, {grid_y})")
+            # logging.info(f"Prepare grid points at grid ({grid_x}, {grid_y})")
 
             for pts_x in range(x_start, x_end, downsample_size_x):
                 for pts_y in range(y_start, y_end, downsample_size_y):
@@ -197,14 +204,14 @@ class ViewProcessor3D():
 
     def read_2d_map_image(self, imag_file):
         image = Image.open(imag_file).transpose(Image.ROTATE_270)
-        print(f"map_img: {imag_file}, format: {image.format}, size: {image.size}")
+        logging.info(f"map_img: {imag_file}, format: {image.format}, size: {image.size}")
 
         return image
 
     def read_pts_3d(self):
         pts_data = np.asarray(self.map_source_img)
         # pts_data = np.moveaxis(pts_data, 0, -1)
-        print(f"pts_data: {pts_data.shape}, type: {type(pts_data)}")
+        logging.info(f"pts_data: {pts_data.shape}, type: {type(pts_data)}")
 
         t_start = time()
 
@@ -212,50 +219,82 @@ class ViewProcessor3D():
 
         t_spend = time() - t_start
 
-        print(f"xyz_3d: {xyz_3d.shape}, type: {type(xyz_3d)}, time: {t_spend}")
+        logging.info(f"xyz_3d: {xyz_3d.shape}, type: {type(xyz_3d)}, time: {t_spend}")
 
         return xyz_3d
 
-    def locate_origin_point(self, min_x, min_y, map_factor_x=0.5, map_factor_y=0.5):
-        map_scale_x = self.window_width / self.map_source_img.size[0]
-        map_scale_y = self.window_height / self.map_source_img.size[1]
+    def locate_origin_point(self):
+        source_map_width, source_map_height = self.map_source_img.size
 
-        pos_x = math.ceil(abs(0 - min_x) * map_factor_x * map_scale_x)
-        pos_y = math.ceil(abs(0 - min_y) * map_factor_y * map_scale_y)
+        scale_x = abs(self.max_x) / (self.max_x - self.min_x)
+        scale_y = abs(self.max_y) / (self.max_y - self.min_y)
 
-        self.orgin_pos = (pos_x, pos_y)
-        self.map_total_factor = (map_factor_x * map_scale_x , map_factor_y * map_scale_y)
-        self.min_xy = (min_x, min_y)
+        pos_x = int(source_map_width * scale_x)
+        pos_y = int(source_map_height * scale_y)
 
-        print(f"Origin point: {self.orgin_pos}")
+        self.origin_pos = (pos_x, pos_y)
 
-        return self.orgin_pos
+        logging.info(f"Origin point: {self.origin_pos}")
+
+        return self.origin_pos
 
     def locate_point(self, pos=(0, 0)):
         input_x, input_y = pos
-        factor_x, factor_y = self.map_total_factor
-        min_x, min_y = self.min_xy
+        pos0_x, pos0_y = self.origin_pos
 
-        pos_x = math.ceil(abs(input_x - min_x) * factor_x)
-        pos_y = math.ceil(abs(input_y - min_y) * factor_y)
+        pos_x = int(input_x * self.map_factor + pos0_x)
+        pos_y = int(input_y * self.map_factor + pos0_y)
 
         map_pos = (pos_x, pos_y)
 
-        print(f"Mapped point: {map_pos} for point {pos}")
+        logging.info(f"Locate 2D Map point: {map_pos} for point {pos}")
 
         return map_pos
+
+    def locate_origin_point_for_moving(self):
+        self.origin_pos_move = self.locate_point_for_moving(pos=self.origin_pos)
+
+        logging.info(f"Origin point for moving: {self.origin_pos_move}")
+
+        return self.origin_pos_move
+
+    def locate_point_for_moving(self, pos=(0, 0)):
+        map_pos_x, map_pos_y = self.locate_point(pos)
+        logging.info(f"Adjust by map size, after ({map_pos_x, map_pos_y})")
+
+        # Adjustment based on zoom factor
+        #adjust_x = int(self.map_source_img.size[0] / self.zoom_factor / 2 - self.map_source_img.size[0] / 2)
+        #adjust_y = int(self.map_source_img.size[1] / self.zoom_factor / 2 - self.map_source_img.size[1] / 2)
+
+        map_pos_x = int(map_pos_x * self.zoom_factor)
+        map_pos_y = int(map_pos_y * self.zoom_factor)
+        logging.info(f"Adjust by zoom, after ({map_pos_x, map_pos_y})")
+
+        map_scale_x = self.window_width / (self.map_source_img.size[0] * self.zoom_factor)
+        map_scale_y = self.window_height / (self.map_source_img.size[1] * self.zoom_factor)
+
+        # Adjustment original point based on window scale
+        map_pos_x = int(map_pos_x * map_scale_x)
+        map_pos_y = int(map_pos_y * map_scale_y)
+        logging.info(f"Adjust by window, after ({map_pos_x, map_pos_y})")
+
+        moving_pos = (map_pos_x, map_pos_y)
+
+        logging.info(f"Mapped move point: {moving_pos} for point {pos}")
+
+        return moving_pos
 
     # Compute moving pixels regarding to origin point
     def locate_moving_distance(self, pos=(0, 0)):
         map_pos_x, map_pos_y = self.locate_point(pos)
-        origin_x, origin_y = self.orgin_pos
+        origin_x, origin_y = self.origin_pos
 
         move_x = map_pos_x - origin_x
         move_y = map_pos_y - origin_y
 
         move_pos = (move_x, move_y)
 
-        print(f"Moving: {move_pos} for point {pos}")
+        logging.info(f"Moving: {move_pos} for point {pos}")
 
         return move_pos
 
@@ -263,7 +302,7 @@ class ViewProcessor3D():
         limit = 5
         for idx, xyz in enumerate(pts_3d):
             if idx < limit:
-                print(xyz)
+                logging.info(xyz)
 
     def convert_to_pcd_data(self, pts_3d):
         pcd_data = o3d.geometry.PointCloud()
@@ -348,12 +387,11 @@ class ViewProcessor3D():
         vis.run()
         vis.destroy_window()
 
+    def get_front_view_camera_params_path(self):
+        return os.path.join(os.path.join(os.getcwd(), 'config'), "front_camera.json")
 
-    def generate_view_image(self, vis3d, pos, camera_params):
-        ctr3d = vis3d.get_view_control()
-        ctr3d.convert_from_pinhole_camera_parameters(camera_params)
-        #ctr3d.translate()
-
+    def get_rear_view_camera_params_path(self):
+        return os.path.join(os.path.join(os.getcwd(), 'config'), "rear_camera.json")
 
     def get_image_path(self, image_filename):
         return os.path.join(os.path.join(os.getcwd(), 'images'), image_filename)
@@ -362,22 +400,81 @@ class ViewProcessor3D():
         render_option_path = os.path.join(os.path.join(os.getcwd(), 'config'), "base_renderoption.json")
         vis3d.get_render_option().load_from_json(render_option_path)
         ctr3d = vis3d.get_view_control()
-        ctr3d.set_zoom(0.5)
+        ctr3d.set_zoom(self.zoom_factor)
 
         vis3d.poll_events()
         vis3d.update_renderer()
 
         map_temp_path = self.get_image_path("map_image_tmp.png")
         o3d_image = vis3d.capture_screen_image(map_temp_path, do_render=True)
-        map_image = Image.open(map_temp_path)
+        map2d_image = Image.open(map_temp_path)
 
-        return map_image
+        return map2d_image
 
-    def generate_map_image_with_marker(self, map_image, pos=(0, 0)):
-        map_pos = self.locate_point(pos)
-        map_image.paste(self.pos_marker_img, map_pos, self.pos_marker_img)
+    def generate_map_image_with_marker(self, target_pos=(0, 0)):
+        map_with_marker = self.map_image.copy()
+        marker_img = self.pos_marker_img.copy()
+        marker_img_width, marker_img_height = marker_img.size
+        #logging.info(f"maker image width: {marker_img_width}, height: {marker_img_height}")
 
-        return map_image
+        move_pos_x, move_pos_y = self.locate_point_for_moving(target_pos)
+        logging.info(f"located marker move pos: ({move_pos_x}, {move_pos_y}) for pos {target_pos}")
+
+        #move_pos_x = int(move_pos_x - 2)
+        #move_pos_y = int(move_pos_y - 2)
+
+        logging.info(f"Prepare map image with marker at move pos: ({move_pos_x}, {move_pos_y})")
+        map_with_marker.paste(marker_img, (move_pos_x, move_pos_y), marker_img)
+        map_with_marker.save("images/check.png")
+
+        return map_with_marker
+
+    def save_current_camera_params(self, vis3d, camera_config_file):
+        ctr3d = vis3d.get_view_control()
+        camera_param = ctr3d.convert_to_pinhole_camera_parameters()
+        o3d.io.write_pinhole_camera_parameters(camera_config_file, camera_param)
+        return True
+
+    def generate_front_rear_view(self, vis3d, target_pos=(0, 0)):
+        #self.origin_pos_move
+        front_move_pos = self.locate_point_for_moving(target_pos)
+        logging.debug(f"Locate move pos: {front_move_pos} for front view pos: {target_pos}")
+
+        x0 = int(self.window_width / 2)
+        y0 = int(self.window_height / 2)
+
+        rotate_x = 800
+        rotate_y = 100
+
+        ctr3d = vis3d.get_view_control()
+        ctr3d.set_zoom(0.2)
+        ctr3d.rotate(0, rotate_y, x0, y0)
+        #ctr3d.translate()
+
+        vis3d.poll_events()
+        vis3d.update_renderer()
+
+        front_img_temp_path = self.get_image_path("front_image_tmp.png")
+        vis3d.capture_screen_image(front_img_temp_path, do_render=True)
+        front_image = Image.open(front_img_temp_path)
+
+        ctr3d.rotate(rotate_x, 0, x0, y0)
+
+        vis3d.poll_events()
+        vis3d.update_renderer()
+
+        rear_img_temp_path = self.get_image_path("rear_image_tmp.png")
+        vis3d.capture_screen_image(rear_img_temp_path, do_render=True)
+        rear_image = Image.open(rear_img_temp_path)
+
+        # Restore
+        ctr3d.rotate(-rotate_y, 0, x0, y0)
+        ctr3d.rotate(0, -rotate_x, x0, y0)
+
+        vis3d.poll_events()
+        vis3d.update_renderer()
+
+        return (front_image, rear_image)
 
     def start_processor_viewer(self, pcd_data):
         vis = o3d.visualization.Visualizer()
@@ -398,19 +495,23 @@ class ViewProcessor3D():
                 rear_img_path = os.path.join(os.path.join(os.getcwd(), 'images'), "rear_image.png")
                 #map_img_path = os.path.join(os.path.join(os.getcwd(), 'images'), "map_image.png")
 
-                view_task.front_img = Image.open(front_img_path)
-                view_task.rear_img = Image.open(rear_img_path)
-                #view_task.map_img = Image.open(map_img_path)
-                view_task.map_img = self.generate_map_image_with_marker(self.map_image, view_task.pos)
+                #view_task.front_img = Image.open(front_img_path)
+                #view_task.rear_img = Image.open(rear_img_path)
+                # view_task.map_img = Image.open(map_img_path)
+
+                view_task.front_img, view_task.rear_img = self.generate_front_rear_view(vis, view_task.pos)
+                view_task.map_img = self.generate_map_image_with_marker(view_task.pos)
                 task_status = self.service_agent.reply_view_task(pos=view_task.pos,
                                                                  front_img=view_task.front_img,
                                                                  rear_img=view_task.rear_img,
                                                                  map_img=view_task.map_img)
-            #vis.update_geometry(pcd_data)
-            # Check whether user stopped application window
-            self.running_tasks = vis.poll_events()
-            vis.update_renderer()
-            sleep(2)
+
+            else:
+                #vis.update_geometry(pcd_data)
+                # Check whether user stopped application window
+                self.running_tasks = vis.poll_events()
+                vis.update_renderer()
+                sleep(1)
 
         self.service_agent.disconnect()
         vis.destroy_window()
@@ -430,10 +531,12 @@ if __name__ == "__main__":
     # Compute from scan3dview
     min_x = -5120
     min_y = -6144
+    max_x = 5120
+    max_y = 3072
 
     map_path = "..\\data\\processed\\merged_gray_images.png"
 
-    viewer = ViewProcessor3D(agent, map_path, min_x=min_x, min_y=min_y)
+    viewer = ViewProcessor3D(agent, map_path, min_x=min_x, min_y=min_y, max_x=max_x, max_y=max_y)
 
     pts = viewer.read_pts_3d()
 

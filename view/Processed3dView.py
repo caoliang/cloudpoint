@@ -435,10 +435,15 @@ class ViewProcessor3D():
         o3d.io.write_pinhole_camera_parameters(camera_config_file, camera_param)
         return True
 
+    def load_camera_params(self, vis3d, camear_config_file):
+        ctr3d = vis3d.get_view_control()
+        camera_params = o3d.io.read_pinhole_camera_parameters(camear_config_file)
+        ctr3d.convert_from_pinhole_camera_parameters(camera_params)
+        return True
+
     def generate_front_rear_view(self, vis3d, target_pos=(0, 0)):
-        #self.origin_pos_move
-        front_move_pos = self.locate_point_for_moving(target_pos)
-        logging.debug(f"Locate move pos: {front_move_pos} for front view pos: {target_pos}")
+        move_pos_x, move_pos_y = self.locate_moving_distance(target_pos)
+        logging.debug(f"Locate front and rear camerar at move pos: ({move_pos_x}, {move_pos_y}) front view pos: {target_pos}")
 
         x0 = int(self.window_width / 2)
         y0 = int(self.window_height / 2)
@@ -446,9 +451,18 @@ class ViewProcessor3D():
         rotate_x = 800
         rotate_y = 100
 
+        front_camera_params = self.get_front_view_camera_params_path()
+        self.load_camera_params(vis3d, front_camera_params)
+        logging.debug("Loaded front camera parameters")
+
         ctr3d = vis3d.get_view_control()
-        ctr3d.set_zoom(0.2)
-        ctr3d.rotate(0, rotate_y, x0, y0)
+        ctr3d.translate(move_pos_x, move_pos_y, x0=origin_x, y0=origin_y)
+
+        #
+        # ctr3d = vis3d.get_view_control()
+        #
+        # ctr3d.set_zoom(0.2)
+        # ctr3d.rotate(0, rotate_y, x0, y0)
         #ctr3d.translate()
 
         vis3d.poll_events()
@@ -458,7 +472,10 @@ class ViewProcessor3D():
         vis3d.capture_screen_image(front_img_temp_path, do_render=True)
         front_image = Image.open(front_img_temp_path)
 
-        ctr3d.rotate(rotate_x, 0, x0, y0)
+        logging.debug("Loaded rear camera parameters")
+
+        rear_camera_parms = self.get_rear_view_camera_params_path()
+        self.load_camera_params(vis3d, rear_camera_parms)
 
         vis3d.poll_events()
         vis3d.update_renderer()
@@ -466,13 +483,6 @@ class ViewProcessor3D():
         rear_img_temp_path = self.get_image_path("rear_image_tmp.png")
         vis3d.capture_screen_image(rear_img_temp_path, do_render=True)
         rear_image = Image.open(rear_img_temp_path)
-
-        # Restore
-        ctr3d.rotate(-rotate_y, 0, x0, y0)
-        ctr3d.rotate(0, -rotate_x, x0, y0)
-
-        vis3d.poll_events()
-        vis3d.update_renderer()
 
         return (front_image, rear_image)
 

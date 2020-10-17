@@ -227,8 +227,11 @@ class ViewProcessor3D():
     def locate_origin_point(self):
         source_map_width, source_map_height = self.map_source_img.size
 
-        pos_x = int(source_map_width * self.map_factor)
-        pos_y = int(source_map_height * self.map_factor)
+        scale_x = abs(self.max_x) / (self.max_x - self.min_x)
+        scale_y = abs(self.max_y) / (self.max_y - self.min_y)
+
+        pos_x = int(source_map_width * scale_x)
+        pos_y = int(source_map_height * scale_y)
 
         self.origin_pos = (pos_x, pos_y)
 
@@ -558,8 +561,8 @@ if __name__ == "__main__":
     # Compute from scan3dview
     min_x = -5120
     min_y = -6144
-    max_x = 5120
-    max_y = 5120
+    max_x = 4800
+    max_y = 5000
 
     map_path = "..\\data\\processed\\merged_gray_images.png"
 

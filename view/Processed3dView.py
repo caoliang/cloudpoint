@@ -452,6 +452,7 @@ class ViewProcessor3D():
     def generate_front_rear_view(self, vis3d, target_pos=(0, 0)):
         origin_x, origin_y = self.origin_pos_move
         move_pos_x, move_pos_y = self.locate_moving_distance(target_pos)
+        target_pos_x, target_pos_y = target_pos
         logging.debug(f"Locate front/rear view to move: ({move_pos_x}, {move_pos_y}) for target: {target_pos}")
 
         x0 = int(self.window_width / 2)
@@ -460,12 +461,27 @@ class ViewProcessor3D():
         rotate_x = 800
         rotate_y = 100
 
+        current_zoom_factor = 0.2
+        current_scale_factor = (2.0 + (self.zoom_factor - current_zoom_factor))
+        move_pos_x = move_pos_x * current_scale_factor
+        move_pos_y = move_pos_y * current_scale_factor
+
         front_camera_params = self.get_front_view_camera_params_path()
         self.load_camera_params(vis3d, front_camera_params)
         logging.debug("Loaded front camera parameters")
 
+        if target_pos_x > 0:
+            front_move_pos_x = -abs(move_pos_x)
+        else:
+            front_move_pos_x = abs(move_pos_x)
+
+        if target_pos_y > 0:
+            front_move_pos_y = -abs(move_pos_y)
+        else:
+            front_move_pos_y = abs(move_pos_y)
+
         ctr3d = vis3d.get_view_control()
-        ctr3d.translate(move_pos_x, move_pos_y, xo=origin_x, yo=origin_y)
+        ctr3d.translate(front_move_pos_x, front_move_pos_y, xo=origin_x, yo=origin_y)
 
         #
         # ctr3d = vis3d.get_view_control()
@@ -486,8 +502,18 @@ class ViewProcessor3D():
         rear_camera_parms = self.get_rear_view_camera_params_path()
         self.load_camera_params(vis3d, rear_camera_parms)
 
+        if target_pos_x > 0:
+            rear_move_pos_x = abs(move_pos_x)
+        else:
+            rear_move_pos_x = -abs(move_pos_x)
+
+        if target_pos_y > 0:
+            rear_move_pos_y = abs(move_pos_y)
+        else:
+            rear_move_pos_y = -abs(move_pos_y)
+
         ctr3d = vis3d.get_view_control()
-        ctr3d.translate(move_pos_x, move_pos_y, xo=origin_x, yo=origin_y)
+        ctr3d.translate(rear_move_pos_x, rear_move_pos_y, xo=origin_x, yo=origin_y)
 
         vis3d.poll_events()
         vis3d.update_renderer()

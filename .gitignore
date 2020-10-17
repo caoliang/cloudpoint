@@ -7,3 +7,5 @@ view/TrackingViewer.log
 view/Processed3dView.log
 view/ViewerBackendService.log
 view/images/map_image_tmp.png
+view/images/check.png
+view/config/pinhole_camera_parameters.json

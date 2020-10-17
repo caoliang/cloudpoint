@@ -262,21 +262,22 @@ class ViewProcessor3D():
         map_pos_x, map_pos_y = self.locate_point(pos)
         logging.info(f"Adjust by map size, after ({map_pos_x, map_pos_y})")
 
-        # Adjustment based on zoom factor
-        #adjust_x = int(self.map_source_img.size[0] / self.zoom_factor / 2 - self.map_source_img.size[0] / 2)
-        #adjust_y = int(self.map_source_img.size[1] / self.zoom_factor / 2 - self.map_source_img.size[1] / 2)
-
-        map_pos_x = int(map_pos_x * self.zoom_factor)
-        map_pos_y = int(map_pos_y * self.zoom_factor)
-        logging.info(f"Adjust by zoom, after ({map_pos_x, map_pos_y})")
-
-        map_scale_x = self.window_width / (self.map_source_img.size[0] * self.zoom_factor)
-        map_scale_y = self.window_height / (self.map_source_img.size[1] * self.zoom_factor)
+        map_scale_x = self.window_width / self.map_source_img.size[0]
+        map_scale_y = self.window_height / self.map_source_img.size[1]
 
         # Adjustment original point based on window scale
         map_pos_x = int(map_pos_x * map_scale_x)
         map_pos_y = int(map_pos_y * map_scale_y)
         logging.info(f"Adjust by window, after ({map_pos_x, map_pos_y})")
+
+        # Adjustment based on zoom factor
+        #adjust_x = int(self.map_source_img.size[0] / self.zoom_factor / 2 - self.map_source_img.size[0] / 2)
+        #adjust_y = int(self.map_source_img.size[1] / self.zoom_factor / 2 - self.map_source_img.size[1] / 2)
+
+        # Adjustment original point based on zoom factor
+        map_pos_x = int(map_pos_x / self.zoom_factor - (self.window_width / 2 / self.zoom_factor - self.window_width / 2))
+        map_pos_y = int(map_pos_y / self.zoom_factor - (self.window_height / 2 / self.zoom_factor - self.window_height / 2))
+        logging.info(f"Adjust by zoom, after ({map_pos_x, map_pos_y})")
 
         moving_pos = (map_pos_x, map_pos_y)
 
@@ -393,6 +394,9 @@ class ViewProcessor3D():
     def get_rear_view_camera_params_path(self):
         return os.path.join(os.path.join(os.getcwd(), 'config'), "rear_camera.json")
 
+    def get_base_view_camera_params_path(self):
+        return os.path.join(os.path.join(os.getcwd(), 'config'), "base_camera.json")
+
     def get_image_path(self, image_filename):
         return os.path.join(os.path.join(os.getcwd(), 'images'), image_filename)
 
@@ -442,8 +446,9 @@ class ViewProcessor3D():
         return True
 
     def generate_front_rear_view(self, vis3d, target_pos=(0, 0)):
+        origin_x, origin_y = self.origin_pos_move
         move_pos_x, move_pos_y = self.locate_moving_distance(target_pos)
-        logging.debug(f"Locate front and rear camerar at move pos: ({move_pos_x}, {move_pos_y}) front view pos: {target_pos}")
+        logging.debug(f"Locate front/rear view to move: ({move_pos_x}, {move_pos_y}) for target: {target_pos}")
 
         x0 = int(self.window_width / 2)
         y0 = int(self.window_height / 2)
@@ -456,7 +461,7 @@ class ViewProcessor3D():
         logging.debug("Loaded front camera parameters")
 
         ctr3d = vis3d.get_view_control()
-        ctr3d.translate(move_pos_x, move_pos_y, x0=origin_x, y0=origin_y)
+        ctr3d.translate(move_pos_x, move_pos_y, xo=origin_x, yo=origin_y)
 
         #
         # ctr3d = vis3d.get_view_control()
@@ -477,12 +482,23 @@ class ViewProcessor3D():
         rear_camera_parms = self.get_rear_view_camera_params_path()
         self.load_camera_params(vis3d, rear_camera_parms)
 
+        ctr3d = vis3d.get_view_control()
+        ctr3d.translate(move_pos_x, move_pos_y, xo=origin_x, yo=origin_y)
+
         vis3d.poll_events()
         vis3d.update_renderer()
 
         rear_img_temp_path = self.get_image_path("rear_image_tmp.png")
         vis3d.capture_screen_image(rear_img_temp_path, do_render=True)
         rear_image = Image.open(rear_img_temp_path)
+
+        logging.debug("Loaded rear camera parameters")
+        # Restore with base camera parameters
+        base_camera_parms = self.get_base_view_camera_params_path()
+        self.load_camera_params(vis3d, base_camera_parms)
+
+        vis3d.poll_events()
+        vis3d.update_renderer()
 
         return (front_image, rear_image)
 
@@ -542,7 +558,7 @@ if __name__ == "__main__":
     min_x = -5120
     min_y = -6144
     max_x = 5120
-    max_y = 3072
+    max_y = 5120
 
     map_path = "..\\data\\processed\\merged_gray_images.png"
 

@@ -223,14 +223,12 @@ class ViewProcessor3D():
 
         return xyz_3d
 
+    # original point position at base 2d map picture
     def locate_origin_point(self):
         source_map_width, source_map_height = self.map_source_img.size
 
-        scale_x = abs(self.max_x) / (self.max_x - self.min_x)
-        scale_y = abs(self.max_y) / (self.max_y - self.min_y)
-
-        pos_x = int(source_map_width * scale_x)
-        pos_y = int(source_map_height * scale_y)
+        pos_x = int(source_map_width * self.map_factor)
+        pos_y = int(source_map_height * self.map_factor)
 
         self.origin_pos = (pos_x, pos_y)
 
@@ -238,6 +236,7 @@ class ViewProcessor3D():
 
         return self.origin_pos
 
+    # point position at base 2d map picture
     def locate_point(self, pos=(0, 0)):
         input_x, input_y = pos
         pos0_x, pos0_y = self.origin_pos
@@ -251,6 +250,7 @@ class ViewProcessor3D():
 
         return map_pos
 
+    # original point at GUI window
     def locate_origin_point_for_moving(self):
         self.origin_pos_move = self.locate_point_for_moving(pos=self.origin_pos)
 
@@ -258,6 +258,7 @@ class ViewProcessor3D():
 
         return self.origin_pos_move
 
+    # point position at GUI window
     def locate_point_for_moving(self, pos=(0, 0)):
         map_pos_x, map_pos_y = self.locate_point(pos)
         logging.info(f"Adjust by map size, after ({map_pos_x, map_pos_y})")

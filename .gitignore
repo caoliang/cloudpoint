@@ -9,3 +9,5 @@ view/ViewerBackendService.log
 view/images/map_image_tmp.png
 view/images/check.png
 view/config/pinhole_camera_parameters.json
+view/images/car_marker_small - Copy.png
+view/config/tracking_tasks.tmp.txt

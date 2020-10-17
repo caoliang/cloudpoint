@@ -421,11 +421,11 @@ class ViewProcessor3D():
         marker_img_width, marker_img_height = marker_img.size
         #logging.info(f"maker image width: {marker_img_width}, height: {marker_img_height}")
 
-        move_pos_x, move_pos_y = self.locate_point_for_moving(target_pos)
-        logging.info(f"located marker move pos: ({move_pos_x}, {move_pos_y}) for pos {target_pos}")
+        marker_pos_x, marker_pos_y = self.locate_point_for_moving(target_pos)
+        logging.info(f"located marker pos: ({marker_pos_x}, {marker_pos_y}) for pos {target_pos}")
 
-        #move_pos_x = int(move_pos_x - 2)
-        #move_pos_y = int(move_pos_y - 2)
+        move_pos_x = int(marker_pos_x - marker_img_width / 2)
+        move_pos_y = int(marker_pos_y - marker_img_height / 2)
 
         logging.info(f"Prepare map image with marker at move pos: ({move_pos_x}, {move_pos_y})")
         map_with_marker.paste(marker_img, (move_pos_x, move_pos_y), marker_img)

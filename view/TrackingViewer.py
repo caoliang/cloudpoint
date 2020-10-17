@@ -95,7 +95,7 @@ class MapViewer():
 
     def __init__(self, service_agent):
         self.service_agent = service_agent
-        self.main_window_size = "1080x640"
+        self.main_window_size = "1080x650"
         self.sight_view_size = (380, 230)
         self.map_view_size = (640, 480)
         self.pos_list = []
@@ -171,6 +171,7 @@ class MapViewer():
     def start_viewer(self):
         logging.info(f"Start to track map view")
         self.tracking_task = True
+        self.txt_map_cord.set("Coordinate: ")
         self.update_viewer()
 
     def update_viewer(self):
@@ -191,7 +192,7 @@ class MapViewer():
         if service_status:
             logging.debug(f"Map view result retrieved")
             self.current_task_view = map_view_results
-            map_pos = self.current_task_view.pos
+            map_pos_x, map_pos_y = self.current_task_view.pos
             front_img = self.current_task_view.front_img
             rear_img = self.current_task_view.rear_img
             map_img = self.current_task_view.map_img
@@ -206,13 +207,17 @@ class MapViewer():
             self.lbl_rear_view.config(image=self.img_rear_view)
             #self.cvs_rear_view.itemconfig(self.img_rear_id, image=self.img_rear_view)
 
+            # Show coordiantes
+            pos_cord = "Coordinate: ({0}, {1})".format(map_pos_x, map_pos_y)
+            self.txt_map_cord.set(pos_cord)
+
             self.mainframe.update()
 
             self.step_index = self.step_index + 1
 
         # Schedule to refresh to get next step
         if self.tracking_task:
-            self.btn_start_track.after(5000, self.update_viewer)
+            self.btn_start_track.after(1000, self.update_viewer)
 
     def exit_viewer(self, ):
         try:
@@ -230,6 +235,7 @@ class MapViewer():
         self.sty_frame = ttk.Style()
         self.sty_frame.configure('viewer.TFrame', background='white')
         self.sty_frame.configure('viewer.TLabel', background='white', font=('Helvetica', 16))
+        self.sty_frame.configure('map.TLabel', background='white', font=('Helvetica', 12))
         self.sty_frame.configure('image.TLabel', background='white')
         self.sty_frame.configure('viewer.main.TLabel', background='white', font=('Helvetica', 26))
         self.sty_frame.configure('viewer.TButton', font=('Helvetica', 14))
@@ -308,13 +314,16 @@ class MapViewer():
                                             style="viewer.TLabel")
         self.lbl_map_view_title.grid(column=0, row=0, sticky=(tk.N, tk.W, tk.E, tk.S))
 
-        #map_img_path = self.get_map_img_path()
-        #logging.debug(f"map_img_path: {map_img_path}")
-        #self.img_map_view = self.resize_image(map_img_path, self.map_view_size)
+        self.txt_map_cord = tk.StringVar()
+        self.txt_map_cord.set("Coordinate: ")
+
+        self.lbl_map_cord = ttk.Label(master=self.frm_right_center, textvariable=self.txt_map_cord, anchor=tk.W,
+                                            style="map.TLabel")
+        self.lbl_map_cord.grid(column=0, row=1, sticky=(tk.N, tk.W, tk.E, tk.S))
 
         self.img_map_view = ImageTk.PhotoImage(Image.new('RGB', self.map_view_size))
         self.lbl_map_view = ttk.Label(master=self.frm_right_center, image=self.img_map_view, style="image.TLabel")
-        self.lbl_map_view.grid(column=0, row=1, sticky=(tk.N, tk.W, tk.E, tk.S))
+        self.lbl_map_view.grid(column=0, row=2, sticky=(tk.N, tk.W, tk.E, tk.S))
 
         #self.cvs_map_view = tk.Canvas(master=self.frm_right_center, bd=0, highlightthickness=0, bg="white",
         #                              width=self.map_view_size[0], height=self.map_view_size[1])

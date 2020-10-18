@@ -455,13 +455,17 @@ class ViewProcessor3D():
         return True
 
     def generate_front_rear_view(self, vis3d, target_pos=(0, 0, 0)):
+        target_pos_x, target_pos_y, target_ort_xy = target_pos
         origin_x, origin_y, origin_ort_xy = self.origin_pos_move
         move_pos_x, move_pos_y, move_ort_xy = self.locate_moving_distance(target_pos)
-        target_pos_x, target_pos_y, target_ort_xy = target_pos
         logging.debug(f"Locate front/rear view to move: ({move_pos_x}, {move_pos_y}) for target: {target_pos}")
 
         x0 = int(self.window_width / 2)
         y0 = int(self.window_height / 2)
+
+        rotate_xy = 0
+        if move_ort_xy != 0:
+            rotate_xy = int(move_ort_xy / 90 * self.window_width)
 
         rotate_x = 800
         rotate_y = 100
@@ -487,6 +491,9 @@ class ViewProcessor3D():
 
         ctr3d = vis3d.get_view_control()
         ctr3d.translate(front_move_pos_x, front_move_pos_y, xo=origin_x, yo=origin_y)
+
+        if rotate_xy > 0:
+            ctr3d.rotate(-rotate_xy, 0, xo=self.window_width, yo=origin_y)
 
         #
         # ctr3d = vis3d.get_view_control()
@@ -519,6 +526,9 @@ class ViewProcessor3D():
 
         ctr3d = vis3d.get_view_control()
         ctr3d.translate(rear_move_pos_x, rear_move_pos_y, xo=origin_x, yo=origin_y)
+
+        if rotate_xy > 0:
+            ctr3d.rotate(-rotate_xy, 0, xo=self.window_width, yo=origin_y)
 
         vis3d.poll_events()
         vis3d.update_renderer()

@@ -11,3 +11,4 @@ view/images/check.png
 view/config/pinhole_camera_parameters.json
 view/images/car_marker_small - Copy.png
 view/config/tracking_tasks.tmp.txt
+view/pinhole_camera_parameters.json

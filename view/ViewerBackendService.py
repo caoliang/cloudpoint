@@ -8,8 +8,10 @@ import time
 class MapState():
 
     def __init__(self):
-        self.posx = 0
-        self.posy = 0
+        # x coordinate, y coordinate, orientation at xy plan
+        self.pos_x = 0
+        self.pos_y = 0
+        self.ort_xy = 0
 
         self.front_img = None
         self.rear_img = None
@@ -40,9 +42,10 @@ class ViewerService(rpyc.Service):
 
         # x, y coordinates
         if "pos" in params:
-            posx, posy = params["pos"]
-            map_state.posx = posx
-            map_state.posy = posy
+            pos_x, pos_y, ort_xy = params["pos"]
+            map_state.pos_x = pos_x
+            map_state.pos_y = pos_y
+            map_state.ort_xy = ort_xy
 
         try:
             self._req_q.put(map_state, timeout=0.1)
@@ -51,7 +54,7 @@ class ViewerService(rpyc.Service):
             map_state.req_state_err = "request error"
             logging.error(f"Cannot put request in queue: {dir(map_state)}", exc_info=True)
 
-        return {"pos": (map_state.posx, map_state.posy), "state_err": map_state.req_state_err}
+        return {"pos": (map_state.pos_x, map_state.pos_y, map_state.ort_xy), "state_err": map_state.req_state_err}
 
     # TrackingViewer receive view map results from backend service
     def exposed_receive_view(self):
@@ -59,9 +62,10 @@ class ViewerService(rpyc.Service):
 
         if self._resp_q.empty():
             map_state.resp_state_err = "empty queue"
-            return {"state_err": map_state.resp_state_err, "pos": (map_state.posx, map_state.posy),
-                 "front_img": map_state.front_img, "rear_img": map_state.rear_img,
-                 "map_img": map_state.map_img}
+            return {"state_err": map_state.resp_state_err,
+                    "pos": (map_state.pos_x, map_state.pos_y, map_state.ort_xy),
+                    "front_img": map_state.front_img, "rear_img": map_state.rear_img,
+                    "map_img": map_state.map_img}
 
         try:
             map_state = self._resp_q.get(timeout=0.1)
@@ -70,9 +74,10 @@ class ViewerService(rpyc.Service):
             map_state.resp_state_err = "response error"
             logging.error(f"Cannot get request in queue", exc_info=True)
 
-        return {"state_err": map_state.resp_state_err, "pos": (map_state.posx, map_state.posy),
-                 "front_img": map_state.front_img, "rear_img": map_state.rear_img,
-                 "map_img": map_state.map_img}
+        return {"state_err": map_state.resp_state_err,
+                "pos": (map_state.pos_x, map_state.pos_y, map_state.ort_xy),
+                "front_img": map_state.front_img, "rear_img": map_state.rear_img,
+                "map_img": map_state.map_img}
 
     # Processed3dView retrieve view task from backend service
     def exposed_retrieve_view_task(self):
@@ -80,7 +85,8 @@ class ViewerService(rpyc.Service):
 
         if self._req_q.empty():
             map_state.req_state_err = "empty queue"
-            return {"pos": (map_state.posx, map_state.posy), "state_err": map_state.req_state_err}
+            return {"pos": (map_state.pos_x, map_state.pos_y, map_state.ort_xy),
+                     "state_err": map_state.req_state_err}
 
         try:
             # Always to get latest task and ignore other tasks
@@ -92,7 +98,8 @@ class ViewerService(rpyc.Service):
             map_state.req_state_err = "error"
             logging.error(f"Cannot retrieve view task", exc_info=True)
 
-        return {"pos": (map_state.posx, map_state.posy), "state_err": map_state.req_state_err}
+        return {"pos": (map_state.pos_x, map_state.pos_y, map_state.ort_xy),
+                "state_err": map_state.req_state_err}
 
     # Processed3dView complete view task and save results to backend service
     def exposed_complete_view_task(self, view_task_state=None):
@@ -102,7 +109,7 @@ class ViewerService(rpyc.Service):
             map_state.resp_state_err = "task error"
             logging.error("Failed to completed view task")
         else:
-            map_state.posx, map_state.posy = view_task_state["pos"]
+            map_state.pos_x, map_state.pos_y, map_state.ort_xy = view_task_state["pos"]
             map_state.front_img = view_task_state["front_img"]
             map_state.rear_img = view_task_state["rear_img"]
             map_state.map_img = view_task_state["map_img"]
@@ -117,7 +124,7 @@ class ViewerService(rpyc.Service):
             map_state.resp_state_err = "error"
             logging.error(f"Cannot save completed view task", exc_info=True)
 
-        return {"state_err": map_state.resp_state_err, "pos": (map_state.posx, map_state.posy)}
+        return {"state_err": map_state.resp_state_err, "pos": (map_state.pos_x, map_state.pos_y, map_state.ort_xy)}
 
 
 if __name__ == "__main__":

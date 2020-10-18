@@ -19,7 +19,8 @@ from time import time, sleep
 class MapViewTask():
 
     def __init__(self):
-        self.pos = (0, 0)
+        # x coordinate, y coordinate, orientation at xy plan
+        self.pos = (0, 0, 0)
 
         self.front_img = None
         self.rear_img = None
@@ -233,21 +234,21 @@ class ViewProcessor3D():
         pos_x = int(source_map_width * scale_x)
         pos_y = int(source_map_height * scale_y)
 
-        self.origin_pos = (pos_x, pos_y)
+        self.origin_pos = (pos_x, pos_y, 0)
 
         logging.info(f"Origin point: {self.origin_pos}")
 
         return self.origin_pos
 
     # point position at base 2d map picture
-    def locate_point(self, pos=(0, 0)):
-        input_x, input_y = pos
-        pos0_x, pos0_y = self.origin_pos
+    def locate_point(self, pos=(0, 0, 0)):
+        input_x, input_y, ort_xy = pos
+        pos0_x, pos0_y, pos0_ort_xy = self.origin_pos
 
         pos_x = int(input_x * self.map_factor + pos0_x)
         pos_y = int(input_y * self.map_factor + pos0_y)
 
-        map_pos = (pos_x, pos_y)
+        map_pos = (pos_x, pos_y, ort_xy)
 
         logging.info(f"Locate 2D Map point: {map_pos} for point {pos}")
 
@@ -262,9 +263,9 @@ class ViewProcessor3D():
         return self.origin_pos_move
 
     # point position at GUI window
-    def locate_point_for_moving(self, pos=(0, 0)):
-        map_pos_x, map_pos_y = self.locate_point(pos)
-        logging.info(f"Adjust by map size, after ({map_pos_x, map_pos_y})")
+    def locate_point_for_moving(self, pos=(0, 0, 0)):
+        map_pos_x, map_pos_y, map_ort_xy = self.locate_point(pos)
+        logging.info(f"Adjust by map size, after ({map_pos_x, map_pos_y, map_ort_xy})")
 
         map_scale_x = self.window_width / self.map_source_img.size[0]
         map_scale_y = self.window_height / self.map_source_img.size[1]
@@ -272,7 +273,7 @@ class ViewProcessor3D():
         # Adjustment original point based on window scale
         map_pos_x = int(map_pos_x * map_scale_x)
         map_pos_y = int(map_pos_y * map_scale_y)
-        logging.info(f"Adjust by window, after ({map_pos_x, map_pos_y})")
+        logging.info(f"Adjust by window, after ({map_pos_x, map_pos_y, map_ort_xy})")
 
         # Adjustment based on zoom factor
         #adjust_x = int(self.map_source_img.size[0] / self.zoom_factor / 2 - self.map_source_img.size[0] / 2)
@@ -281,23 +282,23 @@ class ViewProcessor3D():
         # Adjustment original point based on zoom factor
         map_pos_x = int(map_pos_x / self.zoom_factor - (self.window_width / 2 / self.zoom_factor - self.window_width / 2))
         map_pos_y = int(map_pos_y / self.zoom_factor - (self.window_height / 2 / self.zoom_factor - self.window_height / 2))
-        logging.info(f"Adjust by zoom, after ({map_pos_x, map_pos_y})")
+        logging.info(f"Adjust by zoom, after ({map_pos_x, map_pos_y, map_ort_xy})")
 
-        moving_pos = (map_pos_x, map_pos_y)
+        moving_pos = (map_pos_x, map_pos_y, map_ort_xy)
 
         logging.info(f"Mapped move point: {moving_pos} for point {pos}")
 
         return moving_pos
 
     # Compute moving pixels regarding to origin point
-    def locate_moving_distance(self, pos=(0, 0)):
-        map_pos_x, map_pos_y = self.locate_point(pos)
-        origin_x, origin_y = self.origin_pos
+    def locate_moving_distance(self, pos=(0, 0, 0)):
+        map_pos_x, map_pos_y, map_ort_xy = self.locate_point(pos)
+        origin_x, origin_y, orgin_ort_xy = self.origin_pos
 
         move_x = map_pos_x - origin_x
         move_y = map_pos_y - origin_y
 
-        move_pos = (move_x, move_y)
+        move_pos = (move_x, move_y, map_ort_xy)
 
         logging.info(f"Moving: {move_pos} for point {pos}")
 
@@ -419,14 +420,18 @@ class ViewProcessor3D():
 
         return map2d_image
 
-    def generate_map_image_with_marker(self, target_pos=(0, 0)):
+    def generate_map_image_with_marker(self, target_pos=(0, 0, 0)):
+        marker_pos_x, marker_pos_y, marker_ort_xy = self.locate_point_for_moving(target_pos)
+        logging.info(f"located marker pos: ({marker_pos_x, marker_pos_y, marker_ort_xy}) for pos {target_pos}")
+
         map_with_marker = self.map_image.copy()
         marker_img = self.pos_marker_img.copy()
+        if marker_ort_xy != 0:
+            logging.debug(f"Rotate marker: {marker_ort_xy} degree")
+            marker_img = marker_img.rotate(marker_ort_xy, expand=1)
+
         marker_img_width, marker_img_height = marker_img.size
         #logging.info(f"maker image width: {marker_img_width}, height: {marker_img_height}")
-
-        marker_pos_x, marker_pos_y = self.locate_point_for_moving(target_pos)
-        logging.info(f"located marker pos: ({marker_pos_x}, {marker_pos_y}) for pos {target_pos}")
 
         move_pos_x = int(marker_pos_x - marker_img_width / 2)
         move_pos_y = int(marker_pos_y - marker_img_height / 2)
@@ -449,10 +454,10 @@ class ViewProcessor3D():
         ctr3d.convert_from_pinhole_camera_parameters(camera_params)
         return True
 
-    def generate_front_rear_view(self, vis3d, target_pos=(0, 0)):
-        origin_x, origin_y = self.origin_pos_move
-        move_pos_x, move_pos_y = self.locate_moving_distance(target_pos)
-        target_pos_x, target_pos_y = target_pos
+    def generate_front_rear_view(self, vis3d, target_pos=(0, 0, 0)):
+        origin_x, origin_y, origin_ort_xy = self.origin_pos_move
+        move_pos_x, move_pos_y, move_ort_xy = self.locate_moving_distance(target_pos)
+        target_pos_x, target_pos_y, target_ort_xy = target_pos
         logging.debug(f"Locate front/rear view to move: ({move_pos_x}, {move_pos_y}) for target: {target_pos}")
 
         x0 = int(self.window_width / 2)
@@ -596,7 +601,7 @@ if __name__ == "__main__":
 
     pts = viewer.read_pts_3d()
 
-    check_pos = (10, 10)
+    check_pos = (10, 10, 45)
 
     moving_distance = viewer.locate_moving_distance(pos=check_pos)
 

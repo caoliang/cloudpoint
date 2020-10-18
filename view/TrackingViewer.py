@@ -12,7 +12,8 @@ from time import time, sleep
 class MapViewState():
 
     def __init__(self):
-        self.pos = (0, 0)
+        # x coordinate, y coordinate, orientation at xy plan
+        self.pos = (0, 0, 0)
 
         self.front_img = None
         self.rear_img = None
@@ -42,7 +43,7 @@ class MapAgent():
         finally:
             self.connected = False
 
-    def request_views(self, pos=(0, 0)):
+    def request_views(self, pos=(0, 0, 0)):
         success = True
 
         self.connect()
@@ -115,7 +116,8 @@ class MapViewer():
                 pos_list = line_text.split(",")
                 pos_x = int(pos_list[0].strip())
                 pos_y = int(pos_list[1].strip())
-                self.pos_list.append((pos_x, pos_y))
+                ort_xy = int(pos_list[2].strip())
+                self.pos_list.append((pos_x, pos_y, ort_xy))
 
 
     def get_file_path(self, folder_name, filename):
@@ -171,7 +173,7 @@ class MapViewer():
     def start_viewer(self):
         logging.info(f"Start to track map view")
         self.tracking_task = True
-        self.txt_map_cord.set("Coordinate: ")
+        self.txt_map_cord.set(" ")
         self.update_viewer()
 
     def update_viewer(self):
@@ -192,7 +194,7 @@ class MapViewer():
         if service_status:
             logging.debug(f"Map view result retrieved")
             self.current_task_view = map_view_results
-            map_pos_x, map_pos_y = self.current_task_view.pos
+            map_pos_x, map_pos_y, map_ort_xy = self.current_task_view.pos
             front_img = self.current_task_view.front_img
             rear_img = self.current_task_view.rear_img
             map_img = self.current_task_view.map_img
@@ -208,7 +210,7 @@ class MapViewer():
             #self.cvs_rear_view.itemconfig(self.img_rear_id, image=self.img_rear_view)
 
             # Show coordiantes
-            pos_cord = "Coordinate: ({0}, {1})".format(map_pos_x, map_pos_y)
+            pos_cord = "Coordinate: ({0}, {1}), Orentation: {2}".format(map_pos_x, map_pos_y, map_ort_xy)
             self.txt_map_cord.set(pos_cord)
 
             self.mainframe.update()
@@ -315,7 +317,7 @@ class MapViewer():
         self.lbl_map_view_title.grid(column=0, row=0, sticky=(tk.N, tk.W, tk.E, tk.S))
 
         self.txt_map_cord = tk.StringVar()
-        self.txt_map_cord.set("Coordinate: ")
+        self.txt_map_cord.set(" ")
 
         self.lbl_map_cord = ttk.Label(master=self.frm_right_center, textvariable=self.txt_map_cord, anchor=tk.W,
                                             style="map.TLabel")

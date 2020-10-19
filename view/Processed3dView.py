@@ -61,7 +61,7 @@ class ViewTaskAgent():
                 logging.info(f"Request view task at pos: {view_task.pos} ok")
             else:
                 success = False
-                #logging.info(f"Failed to request view task")
+                # logging.info(f"Failed to request view task")
         except Exception:
             logging.error("Request view task error", exc_info=True)
             success = False
@@ -107,8 +107,8 @@ class ViewTaskAgent():
 
 class ViewProcessor3D():
 
-    def __init__(self, service_agent, map_path, min_x = -5120, min_y = -6144,
-                 max_x = 5120, max_y = 5120, map_factor = 0.5, zoom_factor = 0.5):
+    def __init__(self, service_agent, map_path, min_x=-5120, min_y=-6144,
+                 max_x=5120, max_y=5120, map_factor=0.5, zoom_factor=0.5):
         self.service_agent = service_agent
         self.xyz_data_results = []
 
@@ -276,12 +276,14 @@ class ViewProcessor3D():
         logging.info(f"Adjust by window, after ({map_pos_x, map_pos_y, map_ort_xy})")
 
         # Adjustment based on zoom factor
-        #adjust_x = int(self.map_source_img.size[0] / self.zoom_factor / 2 - self.map_source_img.size[0] / 2)
-        #adjust_y = int(self.map_source_img.size[1] / self.zoom_factor / 2 - self.map_source_img.size[1] / 2)
+        # adjust_x = int(self.map_source_img.size[0] / self.zoom_factor / 2 - self.map_source_img.size[0] / 2)
+        # adjust_y = int(self.map_source_img.size[1] / self.zoom_factor / 2 - self.map_source_img.size[1] / 2)
 
         # Adjustment original point based on zoom factor
-        map_pos_x = int(map_pos_x / self.zoom_factor - (self.window_width / 2 / self.zoom_factor - self.window_width / 2))
-        map_pos_y = int(map_pos_y / self.zoom_factor - (self.window_height / 2 / self.zoom_factor - self.window_height / 2))
+        map_pos_x = int(
+            map_pos_x / self.zoom_factor - (self.window_width / 2 / self.zoom_factor - self.window_width / 2))
+        map_pos_y = int(
+            map_pos_y / self.zoom_factor - (self.window_height / 2 / self.zoom_factor - self.window_height / 2))
         logging.info(f"Adjust by zoom, after ({map_pos_x, map_pos_y, map_ort_xy})")
 
         moving_pos = (map_pos_x, map_pos_y, map_ort_xy)
@@ -375,14 +377,65 @@ class ViewProcessor3D():
             ctr.convert_from_pinhole_camera_parameters(camera_params)
             return False
 
+        def restore_init_view(vis):
+            ctr = vis.get_view_control()
+            camera_params = o3d.io.read_pinhole_camera_parameters("config/base_camera.json")
+            ctr.convert_from_pinhole_camera_parameters(camera_params)
+
+        def perform_custom_action(vis):
+            full_w = self.window_width
+            full_h = self.window_height
+            half_w = int(self.window_width / 2)
+            half_h = int(self.window_height / 2)
+
+            ctr = vis.get_view_control()
+            # ctr.rotate(0, -full_h, half_w, full_h)
+            # ctr.translate(-10, 0, half_w, half_h)
+            ctr.rotate(full_h, 0, 0, half_h)
+            # ctr.translate(-10, 0, half_w, half_h)
+            # ctr.rotate(-full_h, 0, 0, half_h)
+
+            # ctr.set_zoom(0.5)
+            # ctr.set_zoom(0.5)
+
+            return False
+
+        def load_north_view(vis):
+            ctr = vis.get_view_control()
+            camera_params = o3d.io.read_pinhole_camera_parameters(self.get_north_view_camera_params_path())
+            ctr.convert_from_pinhole_camera_parameters(camera_params)
+            return False
+
+        def load_south_view(vis):
+            ctr = vis.get_view_control()
+            camera_params = o3d.io.read_pinhole_camera_parameters(self.get_south_view_camera_params_path())
+            ctr.convert_from_pinhole_camera_parameters(camera_params)
+            return False
+
+        def load_west_view(vis):
+            ctr = vis.get_view_control()
+            camera_params = o3d.io.read_pinhole_camera_parameters(self.get_west_view_camera_params_path())
+            ctr.convert_from_pinhole_camera_parameters(camera_params)
+            return False
+
+        def load_east_view(vis):
+            ctr = vis.get_view_control()
+            camera_params = o3d.io.read_pinhole_camera_parameters(self.get_east_view_camera_params_path())
+            ctr.convert_from_pinhole_camera_parameters(camera_params)
+            return False
+
         key_to_callback = {}
-        key_to_callback[ord("K")] = change_background_to_black
+        key_to_callback[ord("K")] = perform_custom_action
         key_to_callback[ord("S")] = save_render_option
-        key_to_callback[ord("R")] = load_render_option
+        key_to_callback[ord("R")] = restore_init_view
         key_to_callback[ord(",")] = save_image
         key_to_callback[ord(".")] = capture_image
         key_to_callback[ord("P")] = save_view_trajectory
         key_to_callback[ord("V")] = load_view_trajectory
+        key_to_callback[ord("I")] = load_north_view
+        key_to_callback[ord("M")] = load_south_view
+        key_to_callback[ord("J")] = load_west_view
+        key_to_callback[ord("L")] = load_east_view
 
         vis = o3d.visualization.VisualizerWithKeyCallback()
         vis.create_window(width=self.window_width, height=self.window_height)
@@ -401,6 +454,18 @@ class ViewProcessor3D():
 
     def get_base_view_camera_params_path(self):
         return os.path.join(os.path.join(os.getcwd(), 'config'), "base_camera.json")
+
+    def get_north_view_camera_params_path(self):
+        return os.path.join(os.path.join(os.getcwd(), 'config'), "north_camera.json")
+
+    def get_south_view_camera_params_path(self):
+        return os.path.join(os.path.join(os.getcwd(), 'config'), "south_camera.json")
+
+    def get_west_view_camera_params_path(self):
+        return os.path.join(os.path.join(os.getcwd(), 'config'), "west_camera.json")
+
+    def get_east_view_camera_params_path(self):
+        return os.path.join(os.path.join(os.getcwd(), 'config'), "west_camera.json")
 
     def get_image_path(self, image_filename):
         return os.path.join(os.path.join(os.getcwd(), 'images'), image_filename)
@@ -431,7 +496,7 @@ class ViewProcessor3D():
             marker_img = marker_img.rotate(marker_ort_xy, expand=1)
 
         marker_img_width, marker_img_height = marker_img.size
-        #logging.info(f"maker image width: {marker_img_width}, height: {marker_img_height}")
+        # logging.info(f"maker image width: {marker_img_width}, height: {marker_img_height}")
 
         move_pos_x = int(marker_pos_x - marker_img_width / 2)
         move_pos_y = int(marker_pos_y - marker_img_height / 2)
@@ -460,47 +525,95 @@ class ViewProcessor3D():
         move_pos_x, move_pos_y, move_ort_xy = self.locate_moving_distance(target_pos)
         logging.debug(f"Locate front/rear view to move: ({move_pos_x}, {move_pos_y}) for target: {target_pos}")
 
-        x0 = int(self.window_width / 2)
-        y0 = int(self.window_height / 2)
-
-        rotate_xy = 0
-        if move_ort_xy != 0:
-            rotate_xy = int(move_ort_xy / 90 * self.window_width)
-
-        rotate_x = 800
-        rotate_y = 100
-
         current_zoom_factor = 0.2
-        current_scale_factor = (2.0 + (self.zoom_factor - current_zoom_factor))
+        current_scale_factor = 4 * current_zoom_factor
         move_pos_x = move_pos_x * current_scale_factor
         move_pos_y = move_pos_y * current_scale_factor
 
-        front_camera_params = self.get_front_view_camera_params_path()
-        self.load_camera_params(vis3d, front_camera_params)
+        x0 = int(self.window_width / 2)
+        y0 = int(self.window_height / 2)
+
+        # Convert direction to positive degree
+        if move_ort_xy < 0:
+            move_ort_xy = 360 + move_ort_xy
+
+        # dive direction to 4 cartesian
+        if (0 <= move_ort_xy <= 45) or (315 <= move_ort_xy <= 360):
+            ort_cart = 1
+        elif 45 < move_ort_xy < 135:
+            ort_cart = 2
+        elif 135 <= move_ort_xy <= 225:
+            ort_cart = 3
+        elif 225 < move_ort_xy < 315:
+            ort_cart = 4
+        # Invalid direction, so use default direction
+        else:
+            ort_cart = 1
+            move_ort_xy = 0
+
+        logging.info(f"Set orientation cartesian {ort_cart}")
+
+        if ort_cart == 1:
+            front_view_path = self.get_north_view_camera_params_path()
+            rear_view_path = self.get_south_view_camera_params_path()
+            front_move_pos_x = move_pos_x
+            front_move_pos_y = move_pos_y
+            rear_move_pos_x = -move_pos_x
+            rear_move_pos_y = -move_pos_y
+
+            if move_ort_xy == 0:
+                rotate_xy = 0
+            elif move_ort_xy >= 315:
+                rotate_xy = int((move_ort_xy - 360) / 90 * self.window_width)
+            else:
+                rotate_xy = int(move_ort_xy / 90 * self.window_width)
+        elif ort_cart == 2:
+            front_view_path = self.get_west_view_camera_params_path()
+            rear_view_path = self.get_east_view_camera_params_path()
+            front_move_pos_x = -move_pos_y
+            front_move_pos_y = move_pos_x
+            rear_move_pos_x = move_pos_y
+            rear_move_pos_y = -move_pos_x
+
+            if move_ort_xy == 90:
+                rotate_xy = 0
+            else:
+                rotate_xy = int((move_ort_xy - 90) / 90 * self.window_width)
+        elif ort_cart == 3:
+            front_view_path = self.get_south_view_camera_params_path()
+            rear_view_path = self.get_north_view_camera_params_path()
+            front_move_pos_x = -move_pos_x
+            front_move_pos_y = -move_pos_y
+            rear_move_pos_x = move_pos_x
+            rear_move_pos_y = move_pos_y
+
+            if move_ort_xy == 180:
+                rotate_xy = 0
+            else:
+                rotate_xy = int((move_ort_xy - 180) / 90 * self.window_width)
+        elif ort_cart == 4:
+            front_view_path = self.get_east_view_camera_params_path()
+            rear_view_path = self.get_west_view_camera_params_path()
+            front_move_pos_x = move_pos_y
+            front_move_pos_y = -move_pos_x
+            rear_move_pos_x = -move_pos_y
+            rear_move_pos_y = move_pos_x
+
+            if move_ort_xy == 180:
+                rotate_xy = 0
+            else:
+                rotate_xy = int((move_ort_xy - 180) / 90 * self.window_width)
+        else:
+            logging.error(f"Invalid orientation cartesian {ort_cart}")
+
         logging.debug("Loaded front camera parameters")
-
-        if target_pos_x > 0:
-            front_move_pos_x = -abs(move_pos_x)
-        else:
-            front_move_pos_x = abs(move_pos_x)
-
-        if target_pos_y > 0:
-            front_move_pos_y = -abs(move_pos_y)
-        else:
-            front_move_pos_y = abs(move_pos_y)
+        self.load_camera_params(vis3d, front_view_path)
 
         ctr3d = vis3d.get_view_control()
-        ctr3d.translate(front_move_pos_x, front_move_pos_y, xo=origin_x, yo=origin_y)
-
         if rotate_xy > 0:
-            ctr3d.rotate(-rotate_xy, 0, xo=self.window_width, yo=origin_y)
+            ctr3d.rotate(-rotate_xy, 0, xo=origin_x, yo=origin_y)
 
-        #
-        # ctr3d = vis3d.get_view_control()
-        #
-        # ctr3d.set_zoom(0.2)
-        # ctr3d.rotate(0, rotate_y, x0, y0)
-        #ctr3d.translate()
+        ctr3d.translate(-front_move_pos_x, -front_move_pos_y, xo=origin_x, yo=origin_y)
 
         vis3d.poll_events()
         vis3d.update_renderer()
@@ -510,25 +623,14 @@ class ViewProcessor3D():
         front_image = Image.open(front_img_temp_path)
 
         logging.debug("Loaded rear camera parameters")
-
-        rear_camera_parms = self.get_rear_view_camera_params_path()
-        self.load_camera_params(vis3d, rear_camera_parms)
-
-        if target_pos_x > 0:
-            rear_move_pos_x = abs(move_pos_x)
-        else:
-            rear_move_pos_x = -abs(move_pos_x)
-
-        if target_pos_y > 0:
-            rear_move_pos_y = abs(move_pos_y)
-        else:
-            rear_move_pos_y = -abs(move_pos_y)
+        self.load_camera_params(vis3d, rear_view_path)
 
         ctr3d = vis3d.get_view_control()
-        ctr3d.translate(rear_move_pos_x, rear_move_pos_y, xo=origin_x, yo=origin_y)
 
         if rotate_xy > 0:
-            ctr3d.rotate(-rotate_xy, 0, xo=self.window_width, yo=origin_y)
+            ctr3d.rotate(-rotate_xy, 0, xo=origin_x, yo=origin_y)
+
+        ctr3d.translate(-rear_move_pos_x, -rear_move_pos_y, xo=origin_x, yo=origin_y)
 
         vis3d.poll_events()
         vis3d.update_renderer()
@@ -564,10 +666,10 @@ class ViewProcessor3D():
 
                 front_img_path = os.path.join(os.path.join(os.getcwd(), 'images'), "front_image.png")
                 rear_img_path = os.path.join(os.path.join(os.getcwd(), 'images'), "rear_image.png")
-                #map_img_path = os.path.join(os.path.join(os.getcwd(), 'images'), "map_image.png")
+                # map_img_path = os.path.join(os.path.join(os.getcwd(), 'images'), "map_image.png")
 
-                #view_task.front_img = Image.open(front_img_path)
-                #view_task.rear_img = Image.open(rear_img_path)
+                # view_task.front_img = Image.open(front_img_path)
+                # view_task.rear_img = Image.open(rear_img_path)
                 # view_task.map_img = Image.open(map_img_path)
 
                 view_task.front_img, view_task.rear_img = self.generate_front_rear_view(vis, view_task.pos)
@@ -578,7 +680,7 @@ class ViewProcessor3D():
                                                                  map_img=view_task.map_img)
 
             else:
-                #vis.update_geometry(pcd_data)
+                # vis.update_geometry(pcd_data)
                 # Check whether user stopped application window
                 self.running_tasks = vis.poll_events()
                 vis.update_renderer()

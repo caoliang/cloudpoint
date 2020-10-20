@@ -465,7 +465,7 @@ class ViewProcessor3D():
         return os.path.join(os.path.join(os.getcwd(), 'config'), "west_camera.json")
 
     def get_east_view_camera_params_path(self):
-        return os.path.join(os.path.join(os.getcwd(), 'config'), "west_camera.json")
+        return os.path.join(os.path.join(os.getcwd(), 'config'), "east_camera.json")
 
     def get_image_path(self, image_filename):
         return os.path.join(os.path.join(os.getcwd(), 'images'), image_filename)
@@ -519,6 +519,23 @@ class ViewProcessor3D():
         ctr3d.convert_from_pinhole_camera_parameters(camera_params)
         return True
 
+    def translate_view_position(self, ctr3d, move_x, move_y):
+        full_h = self.window_height
+        half_h = int(full_h / 2)
+
+        full_w = self.window_width
+        half_w = int(full_w / 2)
+
+        # Turn to yx plane
+        ctr3d.rotate(full_w, 0, 0, half_h)
+        # Move y
+        ctr3d.translate(-move_y, 0, half_w, half_h)
+        # Restore to xy plane
+        ctr3d.rotate(-full_w, 0, full_w, half_h)
+        # Move x
+        ctr3d.translate(-move_x, 0, half_w, half_h)
+
+
     def generate_front_rear_view(self, vis3d, target_pos=(0, 0, 0)):
         target_pos_x, target_pos_y, target_ort_xy = target_pos
         origin_x, origin_y, origin_ort_xy = self.origin_pos_move
@@ -526,7 +543,7 @@ class ViewProcessor3D():
         logging.debug(f"Locate front/rear view to move: ({move_pos_x}, {move_pos_y}) for target: {target_pos}")
 
         current_zoom_factor = 0.2
-        current_scale_factor = 4 * current_zoom_factor
+        current_scale_factor = 5 * current_zoom_factor
         move_pos_x = move_pos_x * current_scale_factor
         move_pos_y = move_pos_y * current_scale_factor
 
@@ -599,10 +616,10 @@ class ViewProcessor3D():
             rear_move_pos_x = -move_pos_y
             rear_move_pos_y = move_pos_x
 
-            if move_ort_xy == 180:
+            if move_ort_xy == 270:
                 rotate_xy = 0
             else:
-                rotate_xy = int((move_ort_xy - 180) / 90 * self.window_width)
+                rotate_xy = int((move_ort_xy - 270) / 90 * self.window_width)
         else:
             logging.error(f"Invalid orientation cartesian {ort_cart}")
 
@@ -610,10 +627,10 @@ class ViewProcessor3D():
         self.load_camera_params(vis3d, front_view_path)
 
         ctr3d = vis3d.get_view_control()
+        self.translate_view_position(ctr3d, front_move_pos_x, front_move_pos_y)
+
         if rotate_xy > 0:
             ctr3d.rotate(-rotate_xy, 0, xo=origin_x, yo=origin_y)
-
-        ctr3d.translate(-front_move_pos_x, -front_move_pos_y, xo=origin_x, yo=origin_y)
 
         vis3d.poll_events()
         vis3d.update_renderer()
@@ -626,11 +643,10 @@ class ViewProcessor3D():
         self.load_camera_params(vis3d, rear_view_path)
 
         ctr3d = vis3d.get_view_control()
+        self.translate_view_position(ctr3d, rear_move_pos_x, rear_move_pos_y)
 
         if rotate_xy > 0:
             ctr3d.rotate(-rotate_xy, 0, xo=origin_x, yo=origin_y)
-
-        ctr3d.translate(-rear_move_pos_x, -rear_move_pos_y, xo=origin_x, yo=origin_y)
 
         vis3d.poll_events()
         vis3d.update_renderer()

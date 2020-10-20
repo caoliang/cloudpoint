@@ -12,16 +12,21 @@ target_file = os.path.join(os.path.join(os.getcwd(), "config"), "tracking_tasks.
 with open(target_file, 'w') as tf:
     # Orientation in anti-clockwise degree
     orientation_xy = 45
-    x_range = range(0, -300, -10)
-    y_range = range(0, -300, -10)
+    x_range = range(0, -100, -10)
+    y_range = range(0, -100, -10)
     save_tasks(x_range, y_range, orientation_xy, tf)
 
-    orientation_xy = 180
-    x_range = [-300] * 30
-    y_range = range(-300, 0, 10)
+    orientation_xy = 135
+    x_range = range(-100, -200, -10)
+    y_range = range(-100, 0, 10)
     save_tasks(x_range, y_range, orientation_xy, tf)
 
-    orientation_xy = 270
-    x_range = range(-300, 0, 10)
-    y_range = [0] * 30
+    orientation_xy = 225
+    x_range = range(-200, -100, 10)
+    y_range = range(0, 100, 10)
+    save_tasks(x_range, y_range, orientation_xy, tf)
+
+    orientation_xy = 315
+    x_range = range(-100, 0, 10)
+    y_range = range(100, 0, -10)
     save_tasks(x_range, y_range, orientation_xy, tf)

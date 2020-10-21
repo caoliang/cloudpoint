@@ -723,7 +723,7 @@ if __name__ == "__main__":
     max_x = 4800
     max_y = 5000
 
-    map_path = "..\\data\\processed\\merged_gray_images.png"
+    map_path = "..\\data\\processed\\merged_gray_images_reslyr_bound.png"
 
     viewer = ViewProcessor3D(agent, map_path, min_x=min_x, min_y=min_y, max_x=max_x, max_y=max_y)
 
